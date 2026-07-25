@@ -1,0 +1,17 @@
+{
+  "name": "おかししょうぎ",
+  "short_name": "おかし将棋",
+  "description": "和菓子・洋菓子の駒で遊べる、やさしいミニ将棋",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4eee4",
+  "theme_color": "#f4eee4",
+  "icons": [
+    { "src": "../app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "../app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "../app-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

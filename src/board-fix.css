@@ -1,0 +1,422 @@
+/* Keep the 3 × 4 board geometry stable regardless of occupied squares. */
+.board {
+  aspect-ratio: auto;
+  grid-template-rows: repeat(4, auto);
+  min-height: 0;
+}
+
+.square {
+  aspect-ratio: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.piece {
+  position: relative;
+  width: min(104px, 96%);
+  aspect-ratio: 1;
+  max-height: 96%;
+  clip-path: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  filter: drop-shadow(0 5px 3px rgba(80, 45, 13, .24));
+}
+
+.piece-icon {
+  display: block;
+  width: 58%;
+  height: 58%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.sweet-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.hand .piece-icon {
+  width: 25px;
+  height: 25px;
+  margin: 0 auto;
+}
+
+.hand .sweet-icon {
+  width: 38px;
+  height: 38px;
+}
+
+.hand button {
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  clip-path: none;
+  border-color: transparent;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.piece small {
+  max-width: 92%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.movement-guides {
+  position: absolute;
+  z-index: 3;
+  inset: 6.25%;
+  display: grid;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  pointer-events: none;
+}
+
+.movement-guides i {
+  display: block;
+  width: clamp(7px, 2vw, 10px);
+  height: clamp(7px, 2vw, 10px);
+  border: 1px solid #744417;
+  border-radius: 50%;
+  background: #a86627;
+  box-shadow: 0 1px 1px rgba(80, 45, 13, 0.2);
+}
+
+.board-styles {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid #e2d6c6;
+  border-radius: 13px;
+  background: rgba(255, 253, 248, 0.82);
+}
+
+.board-setting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  border-bottom: 1px solid #eee4d5;
+}
+
+.board-setting > div:first-child {
+  display: flex;
+  flex: 0 0 112px;
+  flex-direction: column;
+}
+
+.board-setting b {
+  font-size: 12px;
+}
+
+.board-setting > div:first-child span {
+  margin-top: 2px;
+  color: #9b8b7d;
+  font-size: 9px;
+}
+
+.board-setting .board-styles {
+  flex: 1;
+}
+
+.board-styles legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.board-styles label {
+  flex: 1;
+  cursor: pointer;
+}
+
+.app-shell:has(#board-box:checked) .board {
+  gap: 5px;
+  padding: 5px;
+  border-color: #6f4328;
+  background: #9c6238;
+  box-shadow: inset 0 0 0 2px #d5a66f;
+}
+
+.app-shell:has(#board-box:checked) .square {
+  background: #f5dfb6;
+  box-shadow: inset 0 0 18px rgba(142, 91, 48, .08);
+}
+
+.app-shell:has(#board-box:checked) .square.shade {
+  background: #f1d6a6;
+}
+
+.app-shell:has(#board-box:checked) .movement-guides i {
+  border-color: #80512e;
+  background: #b97842;
+}
+
+.app-shell:has(#board-box:checked) .square.chosen {
+  background: #ffe6a4;
+}
+
+.board-styles input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.board-styles span {
+  display: block;
+  padding: 7px 8px;
+  border-radius: 9px;
+  color: #806f60;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  transition: background .2s, color .2s, box-shadow .2s;
+}
+
+.board-styles input:checked + span {
+  color: #4d3d2f;
+  background: #fff;
+  box-shadow: 0 2px 7px rgba(73, 50, 27, .14);
+}
+
+.board-styles input:focus-visible + span {
+  outline: 3px solid #efad39;
+  outline-offset: 1px;
+}
+
+.app-shell:has(#board-grass:checked) .board {
+  border-color: #596f49;
+  background: #7e965f;
+}
+
+.app-shell:has(#board-grass:checked) .square {
+  background: #dce5b5;
+}
+
+.app-shell:has(#board-grass:checked) .square.shade {
+  background: #ccd99e;
+}
+
+.app-shell:has(#board-grass:checked) .piece {
+  background: transparent;
+  filter: drop-shadow(0 6px 3px rgba(52, 69, 40, .32));
+}
+
+.app-shell:has(#board-grass:checked) .movement-guides i {
+  border-color: #435b35;
+  background: #69854f;
+  box-shadow: 0 1px 1px rgba(44, 65, 31, .2);
+}
+
+.app-shell:has(#board-ink:checked) .board {
+  border-color: #242b31;
+  background: #59626a;
+}
+
+.app-shell:has(#board-ink:checked) .square {
+  background: #66727a;
+}
+
+.app-shell:has(#board-ink:checked) .square.shade {
+  background: #5b676f;
+}
+
+.app-shell:has(#board-ink:checked) .movement-guides i {
+  border-color: #e8c46e;
+  background: #c79b3c;
+  box-shadow: 0 1px 1px rgba(17, 23, 28, .35);
+}
+
+.app-shell:has(#board-wood:checked) .piece {
+  background: transparent;
+  filter: drop-shadow(0 5px 2px rgba(80, 45, 13, .3));
+}
+
+.app-shell:has(#board-ink:checked) .piece {
+  background: transparent;
+  filter: drop-shadow(0 5px 2px rgba(13, 18, 22, .38));
+}
+
+.app-shell:has(#board-grass:checked) .square.chosen {
+  background: #eef1b2;
+}
+
+.app-shell:has(#board-ink:checked) .square.chosen {
+  background: #7f8d91;
+}
+
+.player {
+  border-left-width: 6px;
+}
+
+/* Samurai variant: a fixed battlefield stage shared by the same game engine. */
+.samurai .brand > span {
+  background: #8d3f2c;
+  box-shadow: 0 4px 0 #57291f;
+}
+
+.samurai .game-card,
+.samurai .controls {
+  border-color: #b8a47b;
+  background: #f5f0df;
+}
+
+.samurai .board {
+  gap: 5px;
+  padding: 6px;
+  border-color: #29251f;
+  background: #4a4033;
+  box-shadow: inset 0 0 0 2px #c8a96a, 0 8px 20px rgba(35, 30, 23, .28);
+}
+
+.samurai .square,
+.samurai .square.shade {
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.25), transparent 48%),
+    #ead9aa;
+  box-shadow: inset 0 0 14px rgba(77, 58, 31, .08);
+}
+
+.samurai .square.shade {
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.17), transparent 48%),
+    #d8c28b;
+}
+
+.samurai .square:nth-child(5),
+.samurai .square:nth-child(8) {
+  background-color: #e0ca92;
+}
+
+.samurai .movement-guides i {
+  width: clamp(9px, 2.3vw, 12px);
+  height: clamp(9px, 2.3vw, 12px);
+  border: 2px solid #26231f;
+  background: #fff8df;
+  box-shadow: 0 1px 0 rgba(255,255,255,.8), 0 2px 3px rgba(35, 30, 23, .28);
+}
+
+.samurai .piece {
+  width: min(148px, 94%);
+  max-height: 94%;
+  filter: drop-shadow(0 3px 1px rgba(24, 20, 16, .58));
+}
+
+.samurai .piece::before {
+  position: absolute;
+  z-index: 0;
+  inset: 5%;
+  border: 2px solid #332d25;
+  border-radius: 50%;
+  background: rgba(255, 251, 229, .9);
+  box-shadow: 0 2px 5px rgba(46, 36, 24, .22);
+  content: '';
+}
+
+.samurai .piece.gote::before {
+  border: 5px double #332d25;
+}
+
+.samurai .piece-icon {
+  position: relative;
+  z-index: 1;
+}
+
+.samurai .hand.gote { background: #d7ddd0; }
+.samurai .hand.sente { background: #ead7c7; }
+
+.battlefield-setting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  border-bottom: 1px solid #d7ccb2;
+}
+
+.battlefield-setting > div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.battlefield-setting b { font-size: 12px; }
+.battlefield-setting span { color: #88775f; font-size: 9px; }
+.battlefield-setting strong {
+  padding: 7px 13px;
+  border: 1px solid #9f7f4d;
+  border-radius: 10px;
+  color: #fff8df;
+  background: #6d5938;
+  font-size: 12px;
+}
+
+.player.sente {
+  border-left-color: rgba(220, 112, 75, .28);
+}
+
+.player.gote {
+  border-left-color: rgba(99, 130, 119, .28);
+}
+
+.player.sente.active {
+  border-left-color: #dc704b;
+  background: #fff1d1;
+  box-shadow: inset 0 0 0 1px rgba(220, 112, 75, .14);
+}
+
+.player.gote.active {
+  border-left-color: #638277;
+  background: #e7f1e9;
+  box-shadow: inset 0 0 0 1px rgba(99, 130, 119, .16);
+}
+
+.player.active .info span {
+  color: #69513d;
+  font-weight: 800;
+}
+
+.player .info b {
+  letter-spacing: .06em;
+}
+
+.player select {
+  min-width: 88px;
+}
+
+/* A slightly straighter visual language while keeping touch controls friendly. */
+.game-card,
+.controls {
+  border-radius: 14px;
+}
+
+.brand > span {
+  border-radius: 9px 9px 11px 11px;
+}
+
+.player select,
+.setting select {
+  border-radius: 7px;
+}
+
+.timeline button,
+.result button {
+  border-radius: 7px;
+}
+
+.board-styles {
+  border-radius: 9px;
+}
+
+.board-styles span {
+  border-radius: 6px;
+}
