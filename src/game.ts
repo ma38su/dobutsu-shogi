@@ -7,6 +7,11 @@ export type Position={board:(Piece|null)[];hands:Record<Side,Kind[]>;turn:Side;w
 export const V:Record<Kind,number>={lion:1000,giraffe:5,elephant:5,chick:2,hen:7}
 
 export const other=(side:Side):Side=>side==='sente'?'gote':'sente'
+export const finalRank=(side:Side)=>side==='sente'?0:3
+
+export function canDrop(kind:Kind,side:Side,row:number){
+  return kind!=='chick'||row!==finalRank(side)
+}
 
 export function clone(position:Position):Position{
   return{
@@ -44,13 +49,13 @@ export function pseudo(position:Position,side=position.turn):Move[]{
         piece:piece.kind,
         side,
         captured:target?.kind,
-        promote:piece.kind==='chick'&&(nextRow===0||nextRow===3),
+        promote:piece.kind==='chick'&&nextRow===finalRank(side),
       })
     })
   })
   position.hands[side].forEach(kind=>position.board.forEach((piece,to)=>{
     const row=Math.floor(to/3)
-    if(!piece&&!(kind==='chick'&&(row===0||row===3)))moves.push({hand:kind,to,piece:kind,side})
+    if(!piece&&canDrop(kind,side,row))moves.push({hand:kind,to,piece:kind,side})
   }))
   return moves
 }

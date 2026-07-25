@@ -1,4 +1,4 @@
-import {V,apply,isCheckmate,legal,other,positionKey,score,vec,type Move,type Position,type Side} from './game'
+import {V,apply,isCheckmate,legal,other,positionKey,score,vec,type Move,type Position,type Side} from './game.ts'
 
 type SearchBound='exact'|'lower'|'upper'
 type SearchEntry={value:number;bound:SearchBound;bestMove?:Move}
