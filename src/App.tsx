@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 import './board-fix.css'
 type Side='sente'|'gote'; type Kind='lion'|'giraffe'|'elephant'|'chick'|'hen'; type RuleMode='normal'|'beginner'; type PieceSet='wagashi'|'western'|'mix'; type VisualTheme='sweets'; export type AppVariant='okashi'|'samurai'; type Piece={side:Side;kind:Kind}; type Move={from?:number;hand?:Kind;to:number;piece:Kind;side:Side;captured?:Kind;promote?:boolean}; type Position={board:(Piece|null)[];hands:Record<Side,Kind[]>;turn:Side;winner?:Side;reason?:string}
+type ReviewKind='praise'|'winning'|'capture'|'danger'|'try'|'safety'|'choice'
+type ReviewMoment={moveIndex:number;position:Position;played:Move;best:Move;goodMoves:Move[];loss:number;kind:ReviewKind}
 const F=['1','2','3'],R=['一','二','三','四']; const L:Record<PieceSet,Record<Kind,string>>={wagashi:{lion:'あんみつ',giraffe:'だんご',elephant:'さくらもち',chick:'こんぺいとう',hen:'花こんぺいとう'},western:{lion:'ケーキ',giraffe:'エクレア',elephant:'マカロン',chick:'ジェリー',hen:'キャンディ'},mix:{lion:'パフェ',giraffe:'プリン',elephant:'いちご大福',chick:'クッキー',hen:'王冠クッキー'}},V:Record<Kind,number>={lion:1000,giraffe:5,elephant:5,chick:2,hen:7}
 const VISUAL_THEMES:Record<VisualTheme,{label:string;pieceRoot:string}>={sweets:{label:'おかし',pieceRoot:'./pieces/sweets'}}
 const SAMURAI_NAMES:Record<Kind,string>={lion:'大将',giraffe:'槍武者',elephant:'弓武者',chick:'足軽',hen:'若武者'}
@@ -14,14 +16,126 @@ function apply(p:Position,m:Move,win=true){const n=clone(p),target=n.board[m.to]
 function legal(p:Position){return pseudo(p).filter(m=>{const n=apply(p,m,false),li=n.board.findIndex(x=>x?.side===p.turn&&x.kind==='lion');return li<0||!attacked(n,li,other(p.turn))})}
 function score(p:Position,s:Side){if(p.winner)return p.winner===s?99999:-99999;let v=0;p.board.forEach(x=>{if(x)v+=(x.side===s?1:-1)*V[x.kind]});(['sente','gote']as Side[]).forEach(o=>p.hands[o].forEach(k=>v+=(o===s?1:-1)*V[k]*.9));return v}
 function ai(p:Position,lv:number){const root=p.turn,ms=legal(p);if(lv===1)return ms[Math.floor(Math.random()*ms.length)];const depth=lv===2?2:lv===3?4:5;function go(q:Position,d:number,a:number,b:number):number{if(!d||q.winner)return score(q,root);const xs=legal(q);if(!xs.length)return q.turn===root?-90000:90000;if(q.turn===root){let v=-Infinity;for(const m of xs){v=Math.max(v,go(apply(q,m),d-1,a,b));a=Math.max(a,v);if(b<=a)break}return v}let v=Infinity;for(const m of xs){v=Math.min(v,go(apply(q,m),d-1,a,b));b=Math.min(b,v);if(b<=a)break}return v}return ms.map(m=>({m,v:go(apply(p,m),depth-1,-Infinity,Infinity)+Math.random()*.05})).sort((a,b)=>b.v-a.v)[0]?.m}
+const movesEqual=(a:Move,b:Move)=>a.to===b.to&&a.from===b.from&&a.hand===b.hand&&a.piece===b.piece
+function reviewScore(p:Position,root:Side){
+  let v=score(p,root)
+  if(Math.abs(v)>90000)return v
+  p.board.forEach((x,i)=>{
+    if(!x)return
+    const sign=x.side===root?1:-1,row=Math.floor(i/3)
+    if(x.kind==='lion'){
+      const progress=x.side==='sente'?3-row:row
+      v+=sign*progress*.55
+    }
+    if(x.kind!=='lion'&&attacked(p,i,other(x.side)))v-=sign*V[x.kind]*.22
+  })
+  return v
+}
+function reviewSearch(p:Position,d:number,root:Side,a=-Infinity,b=Infinity):number{
+  if(!d||p.winner)return reviewScore(p,root)
+  const ms=legal(p)
+  if(!ms.length)return p.turn===root?-90000:90000
+  if(p.turn===root){
+    let v=-Infinity
+    for(const m of ms){v=Math.max(v,reviewSearch(apply(p,m),d-1,root,a,b));a=Math.max(a,v);if(b<=a)break}
+    return v
+  }
+  let v=Infinity
+  for(const m of ms){v=Math.min(v,reviewSearch(apply(p,m),d-1,root,a,b));b=Math.min(b,v);if(b<=a)break}
+  return v
+}
+function hasImmediateWin(p:Position){return legal(p).some(m=>apply(p,m).winner===p.turn)}
+function reviewKind(position:Position,played:Move,best:Move,loss:number):ReviewKind{
+  if(loss<.55)return'praise'
+  if(apply(position,best).winner===position.turn)return'winning'
+  const after=apply(position,played)
+  if(hasImmediateWin(after))return'danger'
+  if(best.captured&&!played.captured)return'capture'
+  const goal=position.turn==='sente'?0:3
+  if(best.piece==='lion'&&Math.floor(best.to/3)===goal)return'try'
+  if(attacked(after,played.to,other(position.turn)))return'safety'
+  return'choice'
+}
+function buildReview(hist:Position[],moves:Move[],players:Record<Side,'human'|'ai'>){
+  const moments:ReviewMoment[]=[]
+  moves.forEach((played,i)=>{
+    const position=hist[i]
+    if(!position||position.winner||players[played.side]!=='human')return
+    const ranked=legal(position).map(m=>({m,value:reviewSearch(apply(position,m),2,played.side)})).sort((a,b)=>b.value-a.value)
+    const actual=ranked.find(x=>movesEqual(x.m,played))
+    if(!actual||!ranked[0])return
+    const loss=Math.max(0,ranked[0].value-actual.value),best=loss<.55?played:ranked[0].m
+    moments.push({moveIndex:i,position,best,played,loss,goodMoves:ranked.filter(x=>ranked[0].value-x.value<.55).map(x=>x.m),kind:reviewKind(position,played,best,loss)})
+  })
+  const useful=moments.filter(x=>x.loss>=.55).sort((a,b)=>b.loss-a.loss)
+  const picked:ReviewMoment[]=[]
+  for(const moment of useful){
+    if(picked.every(x=>Math.abs(x.moveIndex-moment.moveIndex)>1))picked.push(moment)
+    if(picked.length===3)break
+  }
+  if(!picked.length)return moments.filter(x=>x.kind==='praise').slice(-2)
+  return picked.sort((a,b)=>a.moveIndex-b.moveIndex)
+}
 const note=(m:Move,names:Record<Kind,string>)=>`${m.side==='sente'?'▲':'△'}${F[m.to%3]}${R[Math.floor(m.to/3)]} ${names[m.piece]}${m.hand?'打':''}${m.promote?'成':''}`
-function App({variant='okashi'}:{variant?:AppVariant}){const[hist,setHist]=useState<Position[]>([clone(INITIAL)]),[moves,setMoves]=useState<Move[]>([]),[cur,setCur]=useState(0),[sel,setSel]=useState<{from?:number;hand?:number}|null>(null),[players,setPlayers]=useState<Record<Side,'human'|'ai'>>({sente:'human',gote:'ai'}),[level,setLevel]=useState(2),[ruleMode,setRuleMode]=useState<RuleMode>('normal'),[visualTheme,setVisualTheme]=useState<VisualTheme>('sweets'),[pieceSet,setPieceSet]=useState<PieceSet>('mix'),[thinking,setThinking]=useState(false);const p=hist[cur],isSamurai=variant==='samurai',names=isSamurai?SAMURAI_NAMES:L[pieceSet],pieceRoot=isSamurai?'../pieces/samurai':'../pieces/sweets',lm=useMemo(()=>legal(p),[p]),pm=useMemo(()=>pseudo(p),[p]);const isSelected=(m:Move)=>!!sel&&(sel.from!==undefined?m.from===sel.from:m.hand===p.hands[p.turn][sel.hand!]);const sameMove=(a:Move,b:Move)=>a.to===b.to&&a.from===b.from&&a.hand===b.hand;function commit(m:Move,foul=false){const next=apply(p,m,!foul);if(foul){next.winner=other(m.side);next.reason='反則負け：合法手ではない手を指しました'}setHist([...hist.slice(0,cur+1),next]);setMoves([...moves.slice(0,cur),m]);setCur(cur+1);setSel(null)}useEffect(()=>{if(p.winner||players[p.turn]!=='ai'){setThinking(false);return}setThinking(true);const t=setTimeout(()=>{const m=ai(p,level);if(m)commit(m)},350);return()=>clearTimeout(t)},[cur,players,p.turn,p.winner,level]);function tap(i:number){if(thinking||p.winner||players[p.turn]==='ai')return;if(sel){const legalMove=lm.find(m=>m.to===i&&isSelected(m));if(legalMove){commit(legalMove);return}const illegalMove=pm.find(m=>m.to===i&&isSelected(m));if(illegalMove&&ruleMode==='normal'){commit(illegalMove,true);return}}const x=p.board[i];setSel(x?.side===p.turn?{from:i}:null)}function reset(){setHist([clone(INITIAL)]);setMoves([]);setCur(0);setSel(null)}const selectedPseudo=sel?pm.filter(isSelected):[],targets=new Set(selectedPseudo.filter(m=>lm.some(x=>sameMove(x,m))).map(m=>m.to)),illegalTargets=new Set(selectedPseudo.filter(m=>!lm.some(x=>sameMove(x,m))).map(m=>m.to))
+function App({variant='okashi'}:{variant?:AppVariant}){const[hist,setHist]=useState<Position[]>([clone(INITIAL)]),[moves,setMoves]=useState<Move[]>([]),[cur,setCur]=useState(0),[sel,setSel]=useState<{from?:number;hand?:number}|null>(null),[players,setPlayers]=useState<Record<Side,'human'|'ai'>>({sente:'human',gote:'ai'}),[level,setLevel]=useState(2),[ruleMode,setRuleMode]=useState<RuleMode>('normal'),[visualTheme,setVisualTheme]=useState<VisualTheme>('sweets'),[pieceSet,setPieceSet]=useState<PieceSet>('mix'),[thinking,setThinking]=useState(false),[review,setReview]=useState<ReviewMoment[]|null>(null),[reviewBusy,setReviewBusy]=useState(false);const p=hist[cur],isSamurai=variant==='samurai',names=isSamurai?SAMURAI_NAMES:L[pieceSet],pieceRoot=isSamurai?'../pieces/samurai':'../pieces/sweets',lm=useMemo(()=>legal(p),[p]),pm=useMemo(()=>pseudo(p),[p]);const isSelected=(m:Move)=>!!sel&&(sel.from!==undefined?m.from===sel.from:m.hand===p.hands[p.turn][sel.hand!]);const sameMove=(a:Move,b:Move)=>a.to===b.to&&a.from===b.from&&a.hand===b.hand;const commit=useCallback((m:Move,foul=false)=>{const next=apply(p,m,!foul);if(foul){next.winner=other(m.side);next.reason='反則負け：合法手ではない手を指しました'}setHist([...hist.slice(0,cur+1),next]);setMoves([...moves.slice(0,cur),m]);setCur(cur+1);setSel(null)},[cur,hist,moves,p]);useEffect(()=>{if(p.winner||players[p.turn]!=='ai'){setThinking(false);return}setThinking(true);const t=setTimeout(()=>{const m=ai(p,level);if(m)commit(m)},350);return()=>clearTimeout(t)},[commit,level,p,players]);function tap(i:number){if(thinking||p.winner||players[p.turn]==='ai')return;if(sel){const legalMove=lm.find(m=>m.to===i&&isSelected(m));if(legalMove){commit(legalMove);return}const illegalMove=pm.find(m=>m.to===i&&isSelected(m));if(illegalMove&&ruleMode==='normal'){commit(illegalMove,true);return}}const x=p.board[i];setSel(x?.side===p.turn?{from:i}:null)}function reset(){setHist([clone(INITIAL)]);setMoves([]);setCur(0);setSel(null);setReview(null)}function openReview(){setReviewBusy(true);window.setTimeout(()=>{setReview(buildReview(hist,moves,players));setReviewBusy(false)},40)}const selectedPseudo=sel?pm.filter(isSelected):[],targets=new Set(selectedPseudo.filter(m=>lm.some(x=>sameMove(x,m))).map(m=>m.to)),illegalTargets=new Set(selectedPseudo.filter(m=>!lm.some(x=>sameMove(x,m))).map(m=>m.to))
+if(review)return <ReviewScreen moments={review} variant={variant} names={names} pieceSet={pieceSet} pieceRoot={pieceRoot} onClose={()=>setReview(null)} onReset={reset}/>
 return <main className={`app-shell ${isSamurai?'samurai':`sweets-${pieceSet}`}`}><header><div className="brand"><span>{isSamurai?'さ':'お'}</span><div><h1>{isSamurai?'さむらいしょうぎ':'おかししょうぎ'}</h1></div></div><button className="new" onClick={reset}>新しい対局</button></header><section className="game-card">
-{(['gote']as Side[]).map(s=><Player key={s} side={s} p={p} thinking={thinking} players={players} setPlayers={setPlayers}/>)}<Hand side="gote" p={p} sel={sel} setSel={setSel} players={players} pieceSet={pieceSet} names={names} pieceRoot={pieceRoot}/><div className="board">{p.board.map((x,i)=><button key={i} onClick={()=>tap(i)} className={`square ${(Math.floor(i/3)+i%3)%2?'shade':''} ${sel?.from===i?'chosen':''} ${targets.has(i)?'target':''} ${ruleMode==='beginner'&&illegalTargets.has(i)?'illegal-target':''}`} aria-label={`${F[i%3]}${R[Math.floor(i/3)]}${x?names[x.kind]:'空き'}${ruleMode==='beginner'&&illegalTargets.has(i)?'、合法手ではありません':''}`}>{x&&<><MovementGuides kind={x.kind} side={x.side}/><div className={`piece ${x.side}`}><PieceIcon kind={x.kind} pieceSet={pieceSet} pieceRoot={pieceRoot}/></div></>}</button>)}</div><Hand side="sente" p={p} sel={sel} setSel={setSel} players={players} pieceSet={pieceSet} names={names} pieceRoot={pieceRoot}/>{(['sente']as Side[]).map(s=><Player key={s} side={s} p={p} thinking={thinking} players={players} setPlayers={setPlayers}/>)}{p.winner&&<div className="result"><span>{p.reason?.startsWith('反則負け')?'❌':'🎉'}</span><div><b>{p.winner==='sente'?'せんて':'ごて'}の勝ち！</b><small>{p.reason}</small></div><button onClick={reset}>もう一局</button></div>}</section>
+{(['gote']as Side[]).map(s=><Player key={s} side={s} p={p} thinking={thinking} players={players} setPlayers={setPlayers}/>)}<Hand side="gote" p={p} sel={sel} setSel={setSel} players={players} pieceSet={pieceSet} names={names} pieceRoot={pieceRoot}/><div className="board">{p.board.map((x,i)=><button key={i} onClick={()=>tap(i)} className={`square ${(Math.floor(i/3)+i%3)%2?'shade':''} ${sel?.from===i?'chosen':''} ${targets.has(i)?'target':''} ${ruleMode==='beginner'&&illegalTargets.has(i)?'illegal-target':''}`} aria-label={`${F[i%3]}${R[Math.floor(i/3)]}${x?names[x.kind]:'空き'}${ruleMode==='beginner'&&illegalTargets.has(i)?'、合法手ではありません':''}`}>{x&&<><MovementGuides kind={x.kind} side={x.side}/><div className={`piece ${x.side}`}><PieceIcon kind={x.kind} pieceSet={pieceSet} pieceRoot={pieceRoot}/></div></>}</button>)}</div><Hand side="sente" p={p} sel={sel} setSel={setSel} players={players} pieceSet={pieceSet} names={names} pieceRoot={pieceRoot}/>{(['sente']as Side[]).map(s=><Player key={s} side={s} p={p} thinking={thinking} players={players} setPlayers={setPlayers}/>)}{p.winner&&<div className="result"><span>{p.reason?.startsWith('反則負け')?'❌':'🎉'}</span><div><b>{p.winner==='sente'?'せんて':'ごて'}の勝ち！</b><small>{p.reason}</small></div><div className="result-actions"><button className="review-start" onClick={openReview} disabled={reviewBusy}>{reviewBusy?'考え中…':'いっしょにおさらい'}</button><button onClick={reset}>もう一局</button></div></div>}</section>
 <section className="controls"><div className="timeline"><button onClick={()=>setCur(0)} disabled={!cur}>|◀</button><button onClick={()=>setCur(cur-1)} disabled={!cur}>◀ 待った</button><div><b>{cur}</b> / {moves.length} 手</div><button onClick={()=>setCur(cur+1)} disabled={cur>=hist.length-1}>進む ▶</button><button onClick={()=>setCur(hist.length-1)} disabled={cur>=hist.length-1}>▶|</button></div><div className="setting"><div><b>対局モード</b><span>{ruleMode==='normal'?'不正手は反則負けになります':'不正な移動先を❌で案内します'}</span></div><select value={ruleMode} onChange={e=>{setRuleMode(e.target.value as RuleMode);setSel(null)}}><option value="normal">通常</option><option value="beginner">入門</option></select></div><div className="setting"><div><b>AIのつよさ</b><span>端末の中だけで考えます</span></div><select value={level} onChange={e=>setLevel(+e.target.value)}><option value="1">やさしい</option><option value="2">ふつう</option><option value="3">つよい</option><option value="4">とてもつよい</option></select></div>{!isSamurai&&<><div className="setting"><div><b>見た目のテーマ</b><span>新しいテーマを追加できます</span></div><select value={visualTheme} onChange={e=>setVisualTheme(e.target.value as VisualTheme)}>{Object.entries(VISUAL_THEMES).map(([id,v])=><option key={id} value={id}>{v.label}</option>)}</select></div><div className="setting"><div><b>おかしの種類</b><span>対局中も変更できます</span></div><select value={pieceSet} onChange={e=>setPieceSet(e.target.value as PieceSet)}><option value="wagashi">和菓子</option><option value="western">洋菓子</option><option value="mix">和洋MIX</option></select></div></>}{isSamurai?<div className="battlefield-setting"><div><b>舞台</b><span>草原と土の戦場</span></div><strong>戦場</strong></div>:<div className="board-setting"><div><b>盤のデザイン</b><span>対局中も変更できます</span></div><BoardStylePicker/></div>}<details><summary>棋譜を見る <span>{moves.length}手</span></summary><ol>{moves.map((m,i)=><li className={cur===i+1?'current':''} key={i}><button onClick={()=>setCur(i+1)}>{note(m,names)}</button></li>)}</ol></details></section><footer>対局はこの端末だけで進みます · オフラインでも遊べます</footer></main>}
 function BoardStylePicker(){return <fieldset className="board-styles"><legend>盤のデザイン</legend><label><input id="board-box" type="radio" name="board-style" defaultChecked/><span>おかし箱</span></label><label><input id="board-wood" type="radio" name="board-style"/><span>木の盤</span></label><label><input id="board-grass" type="radio" name="board-style"/><span>若草</span></label><label><input id="board-ink" type="radio" name="board-style"/><span>墨色</span></label></fieldset>}
 function Player({side,p,thinking,players,setPlayers}:{side:Side;p:Position;thinking:boolean;players:Record<Side,'human'|'ai'>;setPlayers:(v:Record<Side,'human'|'ai'>)=>void}){return <div className={`player ${side} ${p.turn===side?'active':''}`}><div className={`avatar ${side}`}>{side==='sente'?'先':'後'}</div><div className="info"><b>{side==='sente'?'先手':'後手'}</b><span>{p.turn===side?(thinking?'● かんがえ中…':'● 手番です'):'待っています'}</span></div><select aria-label={`${side==='sente'?'先手':'後手'}の担当`} value={players[side]} onChange={e=>setPlayers({...players,[side]:e.target.value as 'human'|'ai'})}><option value="human">👤 人間</option><option value="ai">🤖 AI</option></select></div>}
 function PieceIcon({kind,pieceSet,pieceRoot}:{kind:Kind;pieceSet:PieceSet;pieceRoot:string}){const samuraiFile=kind==='lion'?'lion-mounted-sword':kind;const src=pieceRoot.endsWith('/samurai')?`${pieceRoot}/${samuraiFile}.png?v=3`:`${pieceRoot}/${pieceSet}/${kind}.png?v=7`;return <img className="piece-icon sweet-icon" src={src} alt="" draggable={false}/>}
 function MovementGuides({kind,side}:{kind:Kind;side:Side}){return <span className="movement-guides" aria-hidden="true">{vec(kind,side).map(([dr,dc])=><i key={`${dr},${dc}`} style={{gridRow:dr+2,gridColumn:dc+2,alignSelf:dr<0?'start':dr>0?'end':'center',justifySelf:dc<0?'start':dc>0?'end':'center'}}/>)}</span>}
 function Hand({side,p,sel,setSel,players,pieceSet,names,pieceRoot}:{side:Side;p:Position;sel:{from?:number;hand?:number}|null;setSel:(v:{hand:number})=>void;players:Record<Side,'human'|'ai'>;pieceSet:PieceSet;names:Record<Kind,string>;pieceRoot:string}){return <div className={`hand ${side}`}><span>もちごま</span><div>{p.hands[side].length?p.hands[side].map((k,i)=><button aria-label={names[k]} disabled={p.turn!==side||players[side]==='ai'} onClick={()=>setSel({hand:i})} className={sel?.hand===i&&sel.from===undefined?'selected':''} key={i}><PieceIcon kind={k} pieceSet={pieceSet} pieceRoot={pieceRoot}/></button>):<em>なし</em>}</div></div>}
+function questionFor(kind:ReviewKind,names:Record<Kind,string>,moment:ReviewMoment){
+  if(kind==='praise')return`この${names[moment.played.piece]}の一手、どこがよかったと思う？`
+  if(kind==='winning')return'この一手で勝てる場所を見つけられるかな？'
+  if(kind==='capture')return'いま取れそうな相手の駒をさがしてみよう！'
+  if(kind==='danger')return`${names.lion}を守る一手はどれかな？`
+  if(kind==='try')return`${names.lion}がゴールできる道をさがそう！`
+  if(kind==='safety')return`${names[moment.played.piece]}を安全に動かせるかな？`
+  return'もっと力が出る一手を、いっしょにさがそう！'
+}
+function adviceFor(kind:ReviewKind,names:Record<Kind,string>,moment:ReviewMoment){
+  const best=note(moment.best,names).replace(/^[▲△]/,'')
+  if(kind==='praise')return`その調子！ ${names[moment.played.piece]}がしっかり働く、いい一手だったよ。`
+  if(kind==='winning')return`${best}なら、そのまま勝ちにつながるよ。`
+  if(kind==='capture')return`${best}なら、相手の駒をこちらの仲間にできるよ。`
+  if(kind==='danger')return`${best}で${names.lion}のピンチを切りぬけられるよ。`
+  if(kind==='try')return`${best}なら、ゴールへ大きく近づけるよ。`
+  if(kind==='safety')return`${best}なら、相手に取られにくい場所で力を出せるよ。`
+  return`${best}を選ぶと、次の手でも動きやすくなるよ。`
+}
+function ReviewScreen({moments,variant,names,pieceSet,pieceRoot,onClose,onReset}:{moments:ReviewMoment[];variant:AppVariant;names:Record<Kind,string>;pieceSet:PieceSet;pieceRoot:string;onClose:()=>void;onReset:()=>void}){
+  const[index,setIndex]=useState(0),[selected,setSelected]=useState<{from?:number;hand?:Kind}|null>(null),[feedback,setFeedback]=useState<'correct'|'again'|null>(null),[hint,setHint]=useState(false),[answer,setAnswer]=useState(false)
+  const moment=moments[index]
+  if(!moment)return <main className={`review-shell ${variant}`}><section className="review-empty"><div className="coach-celebrate">🌟</div><h1>とてもいい対局だったね！</h1><p>今回は大きく形勢が変わる手が見つかりませんでした。棋譜を見ながら、お気に入りの一手を思い出してみよう。</p><button onClick={onClose}>棋譜にもどる</button><button className="primary" onClick={onReset}>もう一局</button></section></main>
+  const position=moment.position,allMoves=legal(position)
+  const sourceMatches=(m:Move)=>selected&&(selected.from!==undefined?m.from===selected.from:m.hand===selected.hand)
+  const targets=new Set(selected?allMoves.filter(sourceMatches).map(m=>m.to):[])
+  const coachKind=moment.best.piece
+  const question=questionFor(moment.kind,names,moment),advice=adviceFor(moment.kind,names,moment)
+  const canSpeak='speechSynthesis'in window&&'SpeechSynthesisUtterance'in window
+  const resetQuestion=()=>{setSelected(null);setFeedback(null);setHint(false);setAnswer(false)}
+  const moveTo=(to:number)=>{
+    if(answer)return
+    if(selected){
+      const choice=allMoves.find(m=>m.to===to&&sourceMatches(m))
+      if(choice){
+        if(moment.goodMoves.some(m=>movesEqual(m,choice))){setFeedback('correct');setAnswer(true)}
+        else{setFeedback('again');setSelected(null)}
+        return
+      }
+    }
+    const piece=position.board[to]
+    setSelected(piece?.side===position.turn?{from:to}:null)
+    setFeedback(null)
+  }
+  const speak=()=>{if(!canSpeak)return;window.speechSynthesis.cancel();const voice=new SpeechSynthesisUtterance(answer?advice:question);voice.lang='ja-JP';voice.rate=.9;window.speechSynthesis.speak(voice)}
+  const next=()=>{if(index<moments.length-1){setIndex(index+1);resetQuestion()}else onReset()}
+  return <main className={`review-shell ${variant}`}><header className="review-header"><button onClick={onClose} aria-label="対局画面にもどる">← もどる</button><div><b>{variant==='samurai'?'さむらい作戦会議':'おかしのおさらい会'}</b><span>{index+1} / {moments.length}</span></div></header><div className="review-layout"><section className="review-game"><div className="review-turn"><b>{moment.moveIndex+1}手目</b><span>{position.turn==='sente'?'せんて':'ごて'}の番</span></div><ReviewHand side="gote" position={position} selected={selected} setSelected={setSelected} pieceSet={pieceSet} pieceRoot={pieceRoot} names={names}/><div className="board review-board">{position.board.map((x,i)=><button key={i} onClick={()=>moveTo(i)} className={`square ${(Math.floor(i/3)+i%3)%2?'shade':''} ${selected?.from===i?'chosen':''} ${targets.has(i)?'target':''} ${answer&&moment.best.from===i?'review-source':''} ${answer&&moment.best.to===i?'review-answer':''} ${hint&&moment.best.from===i?'review-hint':''}`} aria-label={`${F[i%3]}${R[Math.floor(i/3)]}${x?names[x.kind]:'空き'}`}>{x&&<div className={`piece ${x.side}`}><PieceIcon kind={x.kind} pieceSet={pieceSet} pieceRoot={pieceRoot}/></div>}</button>)}</div><ReviewHand side="sente" position={position} selected={selected} setSelected={setSelected} pieceSet={pieceSet} pieceRoot={pieceRoot} names={names}/></section><section className="coach-panel" aria-live="polite"><div className="coach"><div className="coach-picture"><PieceIcon kind={coachKind} pieceSet={pieceSet} pieceRoot={pieceRoot}/></div><div><span>{names[coachKind]}からのもんだい</span><b>{feedback==='correct'?'みつけたね！':feedback==='again'?'おしい！ もう一度':answer?'こう考えるよ':'いっしょに考えよう'}</b></div>{canSpeak&&<button className="speak" onClick={speak} aria-label="メッセージを読み上げる">🔊</button>}</div><div className={`speech ${feedback??''}`}><p>{answer?advice:feedback==='again'?'いいところに目をつけたね。相手が次にできることも見てみよう。':question}</p>{!answer&&<small>自分の駒をタップして、行きたい場所を選んでね</small>}</div><div className="review-actions">{answer?<><button className="primary" onClick={next}>{index<moments.length-1?'つぎのもんだい →':'できた！ もう一局'}</button><button onClick={()=>{setAnswer(false);setFeedback(null);setSelected(null)}}>もう一度ためす</button></>:<><button onClick={()=>setHint(true)}>{hint?'光っている駒を動かそう':'ヒントを見る'}</button><button onClick={()=>{setAnswer(true);setFeedback(null)}}>こたえを見る</button></>}</div></section></div></main>
+}
+function ReviewHand({side,position,selected,setSelected,pieceSet,pieceRoot,names}:{side:Side;position:Position;selected:{from?:number;hand?:Kind}|null;setSelected:(value:{hand:Kind})=>void;pieceSet:PieceSet;pieceRoot:string;names:Record<Kind,string>}){
+  return <div className={`hand review-hand ${side}`}><span>もちごま</span><div>{position.hands[side].length?position.hands[side].map((kind,i)=><button key={`${kind}-${i}`} disabled={position.turn!==side} onClick={()=>setSelected({hand:kind})} className={selected?.from===undefined&&selected?.hand===kind?'selected':''} aria-label={`${names[kind]}を打つ`}><PieceIcon kind={kind} pieceSet={pieceSet} pieceRoot={pieceRoot}/></button>):<em>なし</em>}</div></div>
+}
 export default App
