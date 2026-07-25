@@ -1,4 +1,4 @@
-const CACHE_NAME = 'okashi-shogi-v12'
+const CACHE_NAME = 'okashi-shogi-v13'
 const APP_SHELL = [
   './',
   './index.html',
@@ -7,11 +7,6 @@ const APP_SHELL = [
   './app-icon-512.png',
   './app-icon-maskable-512.png',
   './app-apple-touch-icon.png',
-  './pieces/lion.svg',
-  './pieces/giraffe.svg',
-  './pieces/elephant.svg',
-  './pieces/chick.svg',
-  './pieces/hen.svg',
   './pieces/sweets/wagashi/lion.png',
   './pieces/sweets/wagashi/giraffe.png',
   './pieces/sweets/wagashi/elephant.png',

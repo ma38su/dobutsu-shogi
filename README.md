@@ -120,9 +120,6 @@ GitHubのリポジトリ設定では、PagesのSourceを **GitHub Actions** に�
 - ソースコード: <https://github.com/ma38su/dobutsu-shogi>
 - デプロイ状況: <https://github.com/ma38su/dobutsu-shogi/actions/workflows/deploy.yml>
 
-## 素材と権利表記
+## 権利について
 
-Google Noto Emojiを元にした従来の動物駒素材が`public/pieces/`に含まれています。詳細は
-[`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md)を参照してください。
-
-本プロジェクトは、既存の市販商品・公式アプリおよびその権利者による公式製品ではありません。
+本プロジェクトは、既存の市販商品・公式アプリおよびその権利者が提供・承認する公式製品ではありません。
