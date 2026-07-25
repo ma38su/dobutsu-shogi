@@ -102,6 +102,10 @@ for (const game of [
     await page.getByRole('button', { name: `2二${game.chick}`, exact: true }).click()
     await expect(page.locator('.timeline')).toContainText('2 / 2 手')
     await expect(page.getByRole('button', { name: `2二${game.lion}`, exact: true })).toBeVisible()
+    const capturedChick = page.locator('.hand.gote button')
+    await expect(capturedChick).toHaveAttribute('aria-label', new RegExp(`${game.chick}。置いたあとは前に1マス動けます`))
+    await expect(capturedChick.locator('.hand-movement-guides i')).toHaveCount(1)
+    await expect(page.locator('.hand.gote .hand-move-key')).toContainText('置いた後の動き')
 
     expect(errors).toEqual([])
   })

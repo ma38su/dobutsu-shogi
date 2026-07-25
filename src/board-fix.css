@@ -52,6 +52,7 @@
 }
 
 .hand button {
+  position: relative;
   display: grid;
   place-items: center;
   padding: 2px;
@@ -60,6 +61,46 @@
   border-radius: 8px;
   background: transparent;
   box-shadow: none;
+}
+
+.hand .hand-movement-guides {
+  z-index: 2;
+  inset: 1px;
+}
+
+.hand .hand-movement-guides i {
+  width: 7px;
+  height: 7px;
+  border-width: 1px;
+  background: #3f8b60;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, .88),
+    0 1px 2px rgba(45, 76, 51, .34);
+}
+
+.hand .piece-icon {
+  position: relative;
+  z-index: 1;
+}
+
+.hand-move-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: #80512e;
+  font-size: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.hand-move-key i {
+  width: 7px;
+  height: 7px;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  background: #b97842;
+  box-shadow: 0 1px 2px rgba(80, 45, 13, .28);
 }
 
 .piece small {
@@ -157,7 +198,8 @@
   background: #f1d6a6;
 }
 
-.app-shell:has(#board-box:checked) .movement-guides i {
+.app-shell:has(#board-box:checked) .movement-guides i,
+.app-shell:has(#board-box:checked) .hand-move-key i {
   border-color: #80512e;
   background: #b97842;
 }
@@ -212,7 +254,8 @@
   filter: drop-shadow(0 6px 3px rgba(52, 69, 40, .32));
 }
 
-.app-shell:has(#board-grass:checked) .movement-guides i {
+.app-shell:has(#board-grass:checked) .movement-guides i,
+.app-shell:has(#board-grass:checked) .hand-move-key i {
   border-color: #435b35;
   background: #69854f;
   box-shadow: 0 1px 1px rgba(44, 65, 31, .2);
@@ -231,7 +274,8 @@
   background: #5b676f;
 }
 
-.app-shell:has(#board-ink:checked) .movement-guides i {
+.app-shell:has(#board-ink:checked) .movement-guides i,
+.app-shell:has(#board-ink:checked) .hand-move-key i {
   border-color: #e8c46e;
   background: #c79b3c;
   box-shadow: 0 1px 1px rgba(17, 23, 28, .35);
@@ -304,6 +348,11 @@
   border: 2px solid #26231f;
   background: #fff8df;
   box-shadow: 0 1px 0 rgba(255,255,255,.8), 0 2px 3px rgba(35, 30, 23, .28);
+}
+
+.samurai .hand-move-key i {
+  border-color: #26231f;
+  background: #fff8df;
 }
 
 .samurai .piece {
@@ -1885,6 +1934,24 @@
   .app-shell .hand > span,
   .puzzle-play-shell .hand > span {
     font-size: 7px;
+  }
+
+  .app-shell .hand .hand-movement-guides i,
+  .puzzle-play-shell .hand .hand-movement-guides i {
+    width: 6px;
+    height: 6px;
+  }
+
+  .app-shell .hand-move-key,
+  .puzzle-play-shell .hand-move-key {
+    gap: 3px;
+    font-size: 6px;
+  }
+
+  .app-shell .hand-move-key i,
+  .puzzle-play-shell .hand-move-key i {
+    width: 6px;
+    height: 6px;
   }
 
   .app-shell .result {
