@@ -35,7 +35,7 @@
 - 盤上で答えるヒント付きの振り返り問題と、端末音声による読み上げ
 - Web Worker内で実行され、端末内で完結する対局AI
 - Androidスマートフォン、iPad、iPad Proの縦画面で、対局・詰将棋プレイをスクロールなしで操作できるレスポンシブUI
-- おかししょうぎのPWA・オフライン対応
+- おかししょうぎ・さむらいしょうぎのPWA・オフライン対応
 - GitHub ActionsによるGitHub Pagesへの自動デプロイ
 
 ### おかししょうぎ固有の設定
@@ -123,6 +123,8 @@ Pull Requestでは `Health Check`、`main` ブランチへのpushではデプロ
 - GitHub Actions / GitHub Pages
 
 ゲームの状態とAIはクライアント側で処理され、対局のためのバックエンドAPIや外部通信は使用しません。対局AIの探索はWeb Workerへ分離されているため、思考中も画面のメインスレッドを占有しません。
+
+PWA用の各HTMLにはビルド時に画面表示用のJavaScriptとCSSを内包し、Service Workerの範囲外にある共有ファイルへ依存せずオフライン起動できるようにしています。AI Workerも各アプリの配下へ複製されます。
 
 ## AIエンジン
 

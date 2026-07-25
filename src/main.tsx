@@ -20,6 +20,14 @@ createRoot(document.getElementById('root')!).render(
 
 if ((route === 'okashi' || route === 'samurai') && 'serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
+    void navigator.serviceWorker.register('./sw.js').then(async () => {
+      const legacyScope = new URL('../', window.location.href).href
+      const registrations = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(
+        registrations
+          .filter(registration => registration.scope === legacyScope)
+          .map(registration => registration.unregister()),
+      )
+    })
   })
 }

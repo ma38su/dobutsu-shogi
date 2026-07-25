@@ -128,6 +128,21 @@ for (const game of [
       expect((await request.get(`/${game.path}/${asset}`)).ok()).toBe(true)
     }
   })
+
+  test(`${game.name}をオフラインで再表示できる`, async ({ page, context }) => {
+    const errors = captureRuntimeErrors(page)
+    await page.goto(`/${game.path}/`)
+    await page.waitForFunction(async () => {
+      await navigator.serviceWorker.ready
+      return Boolean(navigator.serviceWorker.controller)
+    })
+
+    await context.setOffline(true)
+    await page.reload()
+    await expect(page.getByRole('heading', { name: game.name })).toBeVisible()
+    expect(errors).toEqual([])
+    await context.setOffline(false)
+  })
 }
 
 for (const device of [
