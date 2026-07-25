@@ -168,7 +168,11 @@ function PuzzlePlay({puzzle,variant,names,pieceSet,pieceRoot,onBack,onNext,onCom
   }
   const answerText=hintMove?(hintMove.hand?`${names[hintMove.piece]}を持ち駒から ${squareName(hintMove.to)} へ置こう`:`${squareName(hintMove.from!)} の${names[hintMove.piece]}を ${squareName(hintMove.to)} へ動かそう`):''
   return <main className={`puzzle-play-shell ${variant} ${solved?'puzzle-outcome-clear':wrongPreview?.done?'puzzle-outcome-wrong':''}`}>
-    {(solved||wrongPreview?.done)&&<div className={`puzzle-outcome-effect ${solved?'clear':'wrong'}`} aria-hidden="true">{solved?<>{Array.from({length:12},(_,index)=><i key={index}/>)}</>:<b>×</b>}</div>}
+    {(solved||wrongPreview?.done)&&<div className={`puzzle-outcome-effect ${solved?'clear':'wrong'}`} aria-hidden="true">{solved?<>
+      <div className="party-popper left"/><div className="party-popper right"/>
+      {Array.from({length:28},(_,index)=><i key={index}/>)}
+      {Array.from({length:6},(_,index)=><em key={index}/>)}
+    </>:<b>×</b>}</div>}
     <header className="puzzle-play-header"><button onClick={onBack}>← 問題一覧</button><div><b>{PUZZLE_LEVELS[puzzle.difficulty].short}</b><span>{puzzle.title}</span></div><button onClick={resetPuzzle}>やり直す</button></header>
     <div className="puzzle-play-layout">
       <section className="puzzle-game">
