@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import AiWorker from './ai.worker?worker&inline'
 import type {AiSearchStats} from './ai-engine'
-import {apply,attacked,clone,isInCheck,legal,other,pseudo,vec,type Kind,type Move,type Position,type Side} from './game'
+import {apply,clone,isInCheck,legal,other,pseudo,vec,type Kind,type Move,type Position,type Side} from './game'
 import {applyPuzzle,puzzleMateDistance,puzzleWinningMoves} from './puzzle-engine'
 import {PUZZLES,PUZZLE_LEVELS,type PuzzleDefinition,type PuzzleDifficulty} from './puzzles'
 import {buildReview,immediateWinningMoves,type ReviewMoment} from './review-engine'
@@ -239,7 +239,6 @@ function lessonFor(moment:ReviewMoment,names:Record<Kind,string>):ReviewLesson{
     if(afterBest.reason?.includes('トライ'))return{title:'1手で トライを決めよう',action,result:`${names.lion}が相手側のいちばん奥まで進む`,reason:`その場所は相手の駒に取られないので、この一手でトライが決まるよ。`}
     return{title:'1手で 相手の逃げ道をなくそう',action,result:'相手が動かせる駒も、置ける持ち駒もなくなる',reason:'この一手のあと、相手には指せる手がないので詰みになるよ。'}
   }
-  if(kind==='capture'&&target)return{title:`相手の${names[target.kind]}を取ろう`,action,result:`相手の${names[target.kind]}を取って、もちごまにできる`,reason:'取った駒は、あとで空いている場所へ置いて仲間として使えるからだよ。'}
   if(kind==='escape'){
     const threat=immediateWin(afterPlayed)
     const threatAfter=threat?apply(afterPlayed,threat):undefined
@@ -249,25 +248,12 @@ function lessonFor(moment:ReviewMoment,names:Record<Kind,string>):ReviewLesson{
       :`そのままだと、相手の${names[threat.piece]}が ${squareName(threat.to)} へ来て、こちらの逃げ道がなくなり詰みになった`
     return{title:'助かる一手を見つけよう',action,result:'相手が次の一手で勝てなくなる',reason:`${threatText}から、逃げる・守る・相手を取る手のどれかで先に助けるんだよ。`}
   }
-  if(kind==='try')return{title:`${names.lion}をゴールへ進めよう`,action,result:`${names.lion}が相手側のいちばん奥へ進む`,reason:'相手の駒が届かない場所なので、安全にトライをねらえるよ。'}
-  if(kind==='safety'){
-    const attacker=pseudo({...afterPlayed,hands:{sente:[],gote:[]}},other(position.turn)).find(m=>m.to===played.to)
-    return{title:`${names[played.piece]}を取られない場所へ動かそう`,action,result:`${names[best.piece]}が相手にすぐ取られない場所へ移る`,reason:`実際の手では相手の${attacker?names[attacker.piece]:'駒'}が動ける場所に入っていたので、先に安全な場所へ動かすんだよ。`}
-  }
-  if(kind==='praise'){
-    if(target)return{title:`さっきの「${names[target.kind]}を取る手」をもう一度`,action,result:`相手の${names[target.kind]}を取って、もちごまにできる`,reason:'相手の駒を減らし、自分はその駒をあとで使えるから、よい一手だよ。'}
-    if(best.promote)return{title:'さっきのパワーアップする手をもう一度',action,result:`${names[best.piece]}が${names.hen}にパワーアップする`,reason:`動ける方向が増えて、次の手からもっと活躍できるから、よい一手だよ。`}
-    const enemyLion=afterBest.board.findIndex(x=>x?.side===other(position.turn)&&x.kind==='lion')
-    if(enemyLion>=0&&attacked(afterBest,enemyLion,position.turn))return{title:`さっきの${names.lion}をねらう手をもう一度`,action,result:`次の手で相手の${names.lion}をつかまえられる形になる`,reason:`相手は${names.lion}を助ける必要があり、こちらから攻め続けられるから、よい一手だよ。`}
-    return{title:'さっきのよい一手をもう一度',action,result:`${names[best.piece]}が ${squareName(best.to)} で次の手をねらえる`,reason:`${names.lion}を危険にせず、続けて攻めたり守ったりできる手だからだよ。`}
-  }
-  const opponentMoves=legal(afterBest).length
-  return{title:'相手が動きにくくなる一手を指そう',action,result:`相手が選べる手を ${opponentMoves}こにしぼる`,reason:'相手の自由を少なくすると、こちらが次の作戦を進めやすくなるからだよ。'}
+  return{title:'助かる一手を見つけよう',action,result:'相手が次の一手で勝てなくなる',reason:'この一手だけが、次の相手の勝ちを防げるからだよ。'}
 }
 function ReviewScreen({moments,variant,names,pieceSet,pieceRoot,onClose,onReset}:{moments:ReviewMoment[];variant:AppVariant;names:Record<Kind,string>;pieceSet:PieceSet;pieceRoot:string;onClose:()=>void;onReset:()=>void}){
   const[index,setIndex]=useState(0),[selected,setSelected]=useState<{from?:number;hand?:Kind}|null>(null),[feedback,setFeedback]=useState<'correct'|'again'|null>(null),[hint,setHint]=useState(false),[answer,setAnswer]=useState(false),[solvedMove,setSolvedMove]=useState<Move|null>(null)
   const moment=moments[index]
-  if(!moment)return <main className={`review-shell ${variant}`}><section className="review-empty"><div className="coach-celebrate">🌟</div><h1>とてもいい対局だったね！</h1><p>今回は大きく形勢が変わる手が見つかりませんでした。棋譜を見ながら、お気に入りの一手を思い出してみよう。</p><button onClick={onClose}>棋譜にもどる</button><button className="primary" onClick={onReset}>もう一局</button></section></main>
+  if(!moment)return <main className={`review-shell ${variant}`}><section className="review-empty"><div className="coach-celebrate">🌟</div><h1>おさらいは ここまで！</h1><p>今回は、答えが1つに決まる局面がありませんでした。あいまいな問題は出していません。</p><button onClick={onClose}>棋譜にもどる</button><button className="primary" onClick={onReset}>もう一局</button></section></main>
   const position=moment.position,allMoves=legal(position)
   const sourceMatches=(m:Move)=>selected&&(selected.from!==undefined?m.from===selected.from:m.hand===selected.hand)
   const targets=new Set(selected?allMoves.filter(sourceMatches).map(m=>m.to):[])
