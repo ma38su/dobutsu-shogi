@@ -28,9 +28,9 @@ function validateForcedLine(position, attacker, remaining, puzzleId) {
 }
 
 assert.equal(new Set(PUZZLES.map(puzzle => puzzle.id)).size, PUZZLES.length, 'Puzzle IDs must be unique')
-assert.equal(PUZZLES.filter(puzzle => puzzle.difficulty === 'starter').length, 6, 'Expected six one-move puzzles')
-assert.equal(PUZZLES.filter(puzzle => puzzle.difficulty === 'stepup').length, 3, 'Expected three three-move puzzles')
-assert.equal(PUZZLES.filter(puzzle => puzzle.difficulty === 'challenge').length, 3, 'Expected three five-move puzzles')
+assert.equal(PUZZLES.filter(puzzle => puzzle.difficulty === 'starter').length, 10, 'Expected ten one-move puzzles')
+assert.equal(PUZZLES.filter(puzzle => puzzle.difficulty === 'stepup').length, 10, 'Expected ten three-move puzzles')
+assert.equal(PUZZLES.filter(puzzle => puzzle.difficulty === 'challenge').length, 10, 'Expected ten five-move puzzles')
 
 const previousDiagonalResult = {
   board: [
