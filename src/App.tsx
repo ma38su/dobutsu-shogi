@@ -49,7 +49,7 @@ function App({variant='okashi'}:{variant?:AppVariant}){
   function tap(i:number){if(thinking||p.winner||players[p.turn]==='ai')return;if(sel){const legalMove=lm.find(m=>m.to===i&&isSelected(m));if(legalMove){commit(legalMove);return}const illegalMove=pm.find(m=>m.to===i&&isSelected(m));if(illegalMove&&ruleMode==='normal'){commit(illegalMove,true);return}}const x=p.board[i];setSel(x?.side===p.turn?{from:i}:null)}
   function reset(){setHist([clone(INITIAL)]);setMoves([]);setCur(0);setSel(null);setAiDebug(null);setReview(null)}
   function openReview(){setReviewBusy(true);window.setTimeout(()=>{setReview(buildReview(hist,moves,players));setReviewBusy(false)},40)}
-  const selectedPseudo=sel?pm.filter(isSelected):[],targets=new Set(selectedPseudo.filter(m=>lm.some(x=>sameMove(x,m))).map(m=>m.to)),illegalTargets=new Set(selectedPseudo.filter(m=>!lm.some(x=>sameMove(x,m))).map(m=>m.to))
+  const selectedPseudo=sel?pm.filter(isSelected):[],selectedLion=sel?.from!==undefined&&p.board[sel.from]?.kind==='lion',targets=new Set(selectedPseudo.filter(m=>lm.some(x=>sameMove(x,m))||(ruleMode==='normal'&&selectedLion)).map(m=>m.to)),illegalTargets=new Set(selectedPseudo.filter(m=>!lm.some(x=>sameMove(x,m))).map(m=>m.to))
 if(appMode==='menu')return <ModeMenu variant={variant} pieceSet={pieceSet} pieceRoot={pieceRoot} onBattle={()=>setAppMode('battle')} onPuzzle={()=>setAppMode('puzzle')}/>
 if(appMode==='puzzle')return <PuzzleMode variant={variant} names={names} pieceSet={pieceSet} setPieceSet={setPieceSet} pieceRoot={pieceRoot} onExit={()=>setAppMode('menu')}/>
 if(review)return <ReviewScreen moments={review} variant={variant} names={names} pieceSet={pieceSet} pieceRoot={pieceRoot} onClose={()=>setReview(null)} onReset={reset}/>

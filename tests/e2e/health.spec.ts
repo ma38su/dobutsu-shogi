@@ -256,6 +256,10 @@ for (const game of [
     await expect(capturedChick.locator('.hand-movement-guides i')).toHaveCount(1)
     await expect(page.locator('.hand.gote .hand-move-key')).toContainText('置いた後の動き')
 
+    // 通常モードでは、取られる場所もライオン／大将の移動候補として隠さない。
+    await page.getByRole('button', { name: `2四${game.lion}`, exact: true }).click()
+    await expect(page.getByRole('button', { name: '2三空き', exact: true })).toHaveClass(/target/)
+
     expect(errors).toEqual([])
   })
 }
