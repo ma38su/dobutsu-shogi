@@ -100,7 +100,7 @@ function PuzzleMode({variant,names,pieceSet,setPieceSet,pieceRoot,onExit}:{varia
 function PuzzlePlay({puzzle,variant,names,pieceSet,pieceRoot,onBack,onNext,onComplete}:{puzzle:PuzzleDefinition;variant:AppVariant;names:Record<Kind,string>;pieceSet:PieceSet;pieceRoot:string;onBack:()=>void;onNext?:()=>void;onComplete:()=>void}){
   const attacker:Side='sente'
   type WrongPreview={move:Move;reply?:Move;message?:string;done:boolean}
-  const[current,setCurrent]=useState(()=>clone(puzzle.position)),[remaining,setRemaining]=useState<number>(puzzle.plies),[selected,setSelected]=useState<{from?:number;hand?:Kind}|null>(null),[feedback,setFeedback]=useState<'wrong'|'good'|'your-turn'|null>(null),[hintStage,setHintStage]=useState(0),[thinking,setThinking]=useState(false),[solved,setSolved]=useState(false),[attempts,setAttempts]=useState(0),[wrongPreview,setWrongPreview]=useState<WrongPreview|null>(null)
+  const[current,setCurrent]=useState(()=>clone(puzzle.position)),[remaining,setRemaining]=useState<number>(puzzle.plies),[selected,setSelected]=useState<{from?:number;hand?:Kind}|null>(null),[feedback,setFeedback]=useState<'wrong'|'good'|'your-turn'|'continuing'|null>(null),[hintStage,setHintStage]=useState(0),[thinking,setThinking]=useState(false),[solved,setSolved]=useState(false),[attempts,setAttempts]=useState(0),[wrongPreview,setWrongPreview]=useState<WrongPreview|null>(null),[lastAttackMove,setLastAttackMove]=useState<Move|null>(null)
   const userMoves=useMemo(()=>pseudo(current),[current]),sourceMatches=(m:Move)=>!!selected&&(selected.from!==undefined?m.from===selected.from:m.hand===selected.hand),targets=new Set(selected?userMoves.filter(sourceMatches).map(m=>m.to):[])
   const winningMoves=current.turn===attacker&&!solved&&!wrongPreview?puzzleWinningMoves(current,attacker,remaining):[],hintMove=winningMoves[0]
   useEffect(()=>{
@@ -113,23 +113,15 @@ function PuzzlePlay({puzzle,variant,names,pieceSet,pieceRoot,onBack,onNext,onCom
         const lionCapture=attackerLion>=0?pseudo(current).find(move=>move.to===attackerLion&&move.captured==='lion'):undefined
         const lionReplies=replies.filter(move=>move.piece==='lion')
         const checkerCaptures=replies.filter(move=>move.to===wrongPreview.move.to&&move.captured)
-        const choice=lionCapture??(checked?lionReplies[0]??checkerCaptures[0]:lionReplies[0])??replies[0]
+        const choice=lionCapture??(checked?checkerCaptures[0]??lionReplies[0]:lionReplies[0])??replies[0]
         if(!choice){
           setWrongPreview(preview=>preview?{...preview,done:true,message:`その手は${names.lion}への王手になっていません。相手に合法手はありませんが、王手ではないため詰みではありません。`}:preview)
           setThinking(false)
           return
         }
-        const replyText=note(choice,names),destination=squareName(choice.to)
-        const action=choice.captured==='lion'
-          ?`${names[choice.piece]}が ${destination} で、こちらの${names.lion}を取れます。`
-          :choice.piece==='lion'
-          ?choice.captured?`${names.lion}が ${destination} で王手した駒を取れます。`:`${names.lion}が ${destination} へ逃げられます。`
-          :choice.captured?`${names[choice.piece]}が ${destination} で王手した駒を取れます。`
-          :choice.hand?`${names[choice.piece]}を ${destination} へ打って応じられます。`
-          :`${names[choice.piece]}を ${destination} へ動かして応じられます。`
-        const message=`${checked?'王手はかかりましたが、':'その手は王手になっていません。'}${action}`
+        const message=puzzleReplyMessage(choice,checked,wrongPreview.move,names)
         setCurrent(applyPuzzle(current,choice))
-        setWrongPreview(preview=>preview?{...preview,reply:choice,message:`${message} 実際の応手は「${replyText}」です。`,done:true}:preview)
+        setWrongPreview(preview=>preview?{...preview,reply:choice,message,done:true}:preview)
         setFeedback('wrong');setThinking(false)
       },620)
       return()=>window.clearTimeout(timer)
@@ -138,26 +130,41 @@ function PuzzlePlay({puzzle,variant,names,pieceSet,pieceRoot,onBack,onNext,onCom
     const timer=window.setTimeout(()=>{
       const choices=legal(current).map(move=>({move,distance:puzzleMateDistance(applyPuzzle(current,move),attacker,remaining-1)})).sort((a,b)=>(b.distance??999)-(a.distance??999))
       const choice=choices[0]?.move
-      if(choice){setCurrent(applyPuzzle(current,choice));setRemaining(value=>value-1);setFeedback('your-turn');setHintStage(0);setSelected(null)}
+      if(choice){
+        const next=applyPuzzle(current,choice)
+        if(lastAttackMove&&(choice.captured==='lion'||remaining<=0)){
+          setCurrent(next)
+          setWrongPreview({move:lastAttackMove,reply:choice,message:puzzleReplyMessage(choice,isInCheck(current,current.turn),lastAttackMove,names),done:true})
+          setFeedback('wrong')
+        }else{
+          setCurrent(next);setRemaining(value=>value-1);setFeedback('your-turn');setHintStage(0);setSelected(null);setLastAttackMove(null)
+        }
+      }else if(lastAttackMove){
+        setWrongPreview({move:lastAttackMove,done:true,message:`最後まで指しましたが、その手では${names.lion}への王手にならず、詰みませんでした。`})
+        setFeedback('wrong')
+      }
       setThinking(false)
     },520)
     return()=>window.clearTimeout(timer)
-  },[current,remaining,solved,wrongPreview,names])
-  const resetPuzzle=()=>{setCurrent(clone(puzzle.position));setRemaining(puzzle.plies);setSelected(null);setFeedback(null);setHintStage(0);setThinking(false);setSolved(false);setAttempts(0);setWrongPreview(null)}
+  },[current,remaining,solved,wrongPreview,names,lastAttackMove])
+  const resetPuzzle=()=>{setCurrent(clone(puzzle.position));setRemaining(puzzle.plies);setSelected(null);setFeedback(null);setHintStage(0);setThinking(false);setSolved(false);setAttempts(0);setWrongPreview(null);setLastAttackMove(null)}
   const chooseSquare=(to:number)=>{
     if(thinking||solved||wrongPreview||current.turn!==attacker)return
     if(selected){
       const choice=userMoves.find(move=>move.to===to&&sourceMatches(move))
       if(choice){
         if(!winningMoves.some(move=>movesEqual(move,choice))){
-          setFeedback('wrong');setAttempts(value=>value+1);setSelected(null);setHintStage(0)
+          setAttempts(value=>value+1);setSelected(null);setHintStage(0)
+          setCurrent(apply(current,choice,false))
           if(puzzle.plies===1){
-            setCurrent(apply(current,choice,false));setWrongPreview({move:choice,done:false});setThinking(true)
+            setFeedback('wrong');setWrongPreview({move:choice,done:false});setThinking(true)
+          }else{
+            setRemaining(value=>value-1);setFeedback('continuing');setLastAttackMove(choice)
           }
           return
         }
         const next=applyPuzzle(current,choice)
-        setCurrent(next);setRemaining(value=>value-1);setSelected(null);setFeedback('good');setHintStage(0)
+        setCurrent(next);setRemaining(value=>value-1);setSelected(null);setFeedback('good');setHintStage(0);setLastAttackMove(null)
         if(next.winner===attacker){setSolved(true);onComplete()}
         return
       }
@@ -184,7 +191,7 @@ function PuzzlePlay({puzzle,variant,names,pieceSet,pieceRoot,onBack,onNext,onCom
       <section className={`puzzle-guide ${feedback??''} ${solved?'solved':''} ${wrongPreview?'wrong-preview':''}`} aria-live="polite">
         {solved?<><div className="puzzle-celebrate">🎉</div><span>クリア！</span><h1>{attempts?'あきらめずに見つけたね！':'読み切ったね！'}</h1><p>{puzzle.plies}手の詰みを完成させました。別の問題にも挑戦してみよう。</p><div className="puzzle-guide-actions"><button className="primary next-puzzle" onClick={onNext??onBack}>{onNext?'つぎの問題へ →':'全問クリア！ 問題一覧へ'}</button><button onClick={onBack}>問題一覧</button><button onClick={resetPuzzle}>もう一度</button></div></>:wrongPreview?<><div className="puzzle-wrong-mark">×</div><span className="puzzle-wrong-label">{wrongPreview.done?'不正解':'応手を確認中'}</span><h1>{wrongPreview.done?(wrongPreview.reply?'相手に一手返されました':'王手になっていません'):'その手のあとを見てみよう'}</h1><p>{wrongPreview.message??`相手がどう応じるか、盤面で確認しています。`}</p>{wrongPreview.reply&&<div className="puzzle-wrong-reply"><b>相手の応手</b><span>{note(wrongPreview.reply,names)}</span></div>}<div className="puzzle-guide-actions"><button className="primary retry-puzzle" onClick={resetPuzzle} disabled={!wrongPreview.done}>もう一度考える</button><button onClick={onBack}>問題一覧</button></div></>:<>
           <span className="puzzle-guide-label">今回のミッション</span><h1>{puzzle.mission.replace('ライオン',names.lion)}</h1>
-          <p>{feedback==='wrong'?'その手では、相手に逃げ道が残るよ。別の手を考えてみよう。':feedback==='good'?'いい王手！ 相手の返しも見てみよう。':feedback==='your-turn'?'相手が逃げたよ。次の一手で追いかけよう。':'下側の自分の駒を選んで、行き先をタップしよう。'}</p>
+          <p>{feedback==='wrong'?'その手では、相手に逃げ道が残るよ。別の手を考えてみよう。':feedback==='good'?'いい王手！ 相手の返しも見てみよう。':feedback==='continuing'?'その手を盤面に反映したよ。相手の応手を見て、最後まで指してみよう。':feedback==='your-turn'?'相手が応じたよ。続きの手を考えよう。':'下側の自分の駒を選んで、行き先をタップしよう。'}</p>
           {hintStage>=2&&answerText&&<div className="puzzle-answer">{answerText}</div>}
           <div className="puzzle-guide-actions"><button onClick={()=>setHintStage(stage=>Math.min(2,stage+1))} disabled={thinking||hintStage>=2}>{hintStage===0?'動かす駒のヒント':hintStage===1?'行き先も見る':'答えを表示中'}</button><button onClick={resetPuzzle}>最初から</button></div>
         </>}
@@ -208,6 +215,17 @@ function Hand({side,p,sel,setSel,players,pieceSet,names,pieceRoot}:{side:Side;p:
 }
 type ReviewLesson={title:string;action:string;result:string;reason:string}
 const squareName=(i:number)=>`${F[i%3]}${R[Math.floor(i/3)]}`
+function puzzleReplyMessage(choice:Move,checked:boolean,attemptedMove:Move,names:Record<Kind,string>){
+  const replyText=note(choice,names),destination=squareName(choice.to)
+  const action=choice.captured==='lion'
+    ?`${names[choice.piece]}が ${destination} で、こちらの${names.lion}を取れます。`
+    :choice.piece==='lion'
+    ?choice.captured?(choice.to===attemptedMove.to?`${names.lion}が ${destination} で王手した駒を取れます。`:`${names.lion}が ${destination} で、こちらの${names[choice.captured]}を取れます。`):`${names.lion}が ${destination} へ逃げられます。`
+    :choice.captured?(choice.to===attemptedMove.to?`${names[choice.piece]}が ${destination} で王手した駒を取れます。`:`${names[choice.piece]}が ${destination} で、こちらの${names[choice.captured]}を取れます。`)
+    :choice.hand?`${names[choice.piece]}を ${destination} へ打って応じられます。`
+    :`${names[choice.piece]}を ${destination} へ動かして応じられます。`
+  return`${checked?'王手はかかりましたが、':'その手は王手になっていません。'}${action} 実際の応手は「${replyText}」です。`
+}
 function immediateWin(p:Position){return immediateWinningMoves(p)[0]}
 function lessonFor(moment:ReviewMoment,names:Record<Kind,string>):ReviewLesson{
   const {position,best,played,kind}=moment

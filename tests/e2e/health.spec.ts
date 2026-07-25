@@ -121,6 +121,72 @@ test('1手詰めの不正解後に相手の応手と理由を表示する', asyn
   expect(errors).toEqual([])
 })
 
+for (const wrongLine of [
+  {
+    plies: 3,
+    tab: /3手詰め/,
+    puzzle: /ぞうで 道をあける/,
+    moves: [
+      ['3二 王冠クッキー', '2一 空き'],
+      ['1三 いちご大福', '2二 王冠クッキー'],
+    ],
+  },
+  {
+    plies: 5,
+    tab: /5手詰め/,
+    puzzle: /もちごまから 連続王手/,
+    moves: [
+      ['プリン。置いたあとはたて・よこに1マス動けます。選ぶと置ける場所を表示します', '3一 空き'],
+      ['3一 プリン', '2一 空き'],
+      ['3二 クッキー', '3一 空き'],
+    ],
+  },
+]) {
+  test(`${wrongLine.plies}手詰めは間違いの手順も最後まで指してから不正解を表示する`, async ({ page }) => {
+    const errors = captureRuntimeErrors(page)
+
+    await page.goto('/okashi/')
+    await page.getByRole('button', { name: /詰将棋に挑戦/ }).click()
+    await page.getByRole('button', { name: wrongLine.tab }).click()
+    await page.getByRole('button', { name: wrongLine.puzzle }).click()
+
+    for (const [index, [from, to]] of wrongLine.moves.entries()) {
+      await page.getByRole('button', { name: from, exact: true }).click()
+      await page.getByRole('button', { name: to, exact: true }).click()
+      if (index < wrongLine.moves.length - 1) {
+        await expect(page.getByText(`${wrongLine.plies - (index + 1) * 2}手以内に詰ませよう`)).toBeVisible()
+        await expect(page.getByText('不正解', { exact: true })).toHaveCount(0)
+      }
+    }
+
+    await expect(page.getByText('不正解', { exact: true })).toBeVisible()
+    await expect(page.getByText('不正解：応手があります')).toBeVisible()
+    await expect(page.getByText('相手の応手', { exact: true })).toBeVisible()
+    await expect(page.locator('.puzzle-guide')).toContainText('へ逃げられます')
+    await expect(page.locator('.puzzle-wrong-move')).toHaveCount(1)
+    await expect(page.locator('.puzzle-reply-source')).toHaveCount(1)
+    await expect(page.locator('.puzzle-reply-target')).toHaveCount(1)
+    expect(errors).toEqual([])
+  })
+}
+
+test('3手詰めでも自分の王を取られる手はその応手で不正解にする', async ({ page }) => {
+  const errors = captureRuntimeErrors(page)
+
+  await page.goto('/okashi/')
+  await page.getByRole('button', { name: /詰将棋に挑戦/ }).click()
+  await page.getByRole('button', { name: /3手詰め/ }).click()
+  await page.getByRole('button', { name: /ななめから まっすぐ/ }).click()
+
+  await page.getByRole('button', { name: '2四 パフェ', exact: true }).click()
+  await page.getByRole('button', { name: '3三 空き', exact: true }).click()
+
+  await expect(page.getByText('不正解', { exact: true })).toBeVisible()
+  await expect(page.getByText('相手の応手', { exact: true })).toBeVisible()
+  await expect(page.locator('.puzzle-guide')).toContainText('こちらのパフェを取れます')
+  expect(errors).toEqual([])
+})
+
 test('詰将棋ではライオンの危険な移動先も候補に表示する', async ({ page }) => {
   const errors = captureRuntimeErrors(page)
 
