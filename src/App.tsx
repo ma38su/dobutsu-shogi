@@ -49,6 +49,7 @@ function puzzleMateDistance(p:Position,attacker:Side,depth:number):number|null{
   return result
 }
 function puzzleWinningMoves(p:Position,attacker:Side,remaining:number){return legal(p).filter(m=>{const d=puzzleMateDistance(applyPuzzle(p,m),attacker,remaining-1);return d!==null&&d<=remaining-1})}
+if(import.meta.env.DEV)PUZZLES.forEach(item=>{const distance=puzzleMateDistance(item.position,'sente',item.plies),shorter=item.plies>1?puzzleMateDistance(item.position,'sente',item.plies-2):null,firstMoves=puzzleWinningMoves(item.position,'sente',item.plies);if(distance!==item.plies||shorter!==null||firstMoves.length!==1)console.error(`Invalid puzzle: ${item.id}`,{distance,shorter,firstMoves})})
 function score(p:Position,s:Side){if(p.winner)return p.winner===s?99999:-99999;let v=0;p.board.forEach(x=>{if(x)v+=(x.side===s?1:-1)*V[x.kind]});(['sente','gote']as Side[]).forEach(o=>p.hands[o].forEach(k=>v+=(o===s?1:-1)*V[k]*.9));return v}
 function ai(p:Position,lv:number){const root=p.turn,ms=legal(p);if(lv===1)return ms[Math.floor(Math.random()*ms.length)];const depth=lv===2?2:lv===3?4:5;function go(q:Position,d:number,a:number,b:number):number{if(!d||q.winner)return score(q,root);const xs=legal(q);if(!xs.length)return q.turn===root?-90000:90000;if(q.turn===root){let v=-Infinity;for(const m of xs){v=Math.max(v,go(apply(q,m),d-1,a,b));a=Math.max(a,v);if(b<=a)break}return v}let v=Infinity;for(const m of xs){v=Math.min(v,go(apply(q,m),d-1,a,b));b=Math.min(b,v);if(b<=a)break}return v}return ms.map(m=>({m,v:go(apply(p,m),depth-1,-Infinity,Infinity)+Math.random()*.05})).sort((a,b)=>b.v-a.v)[0]?.m}
 const movesEqual=(a:Move,b:Move)=>a.to===b.to&&a.from===b.from&&a.hand===b.hand&&a.piece===b.piece
@@ -167,7 +168,7 @@ function PuzzleMode({variant,names,pieceSet,setPieceSet,pieceRoot,onExit}:{varia
     {variant==='okashi'&&<label className="puzzle-piece-set"><span><b>おかしの種類</b><small>好きな見た目で挑戦できます</small></span><select value={pieceSet} onChange={event=>setPieceSet(event.target.value as PieceSet)}><option value="wagashi">和菓子</option><option value="western">洋菓子</option><option value="mix">和洋MIX</option></select></label>}
     <nav className="difficulty-tabs" aria-label="難易度を選ぶ">{(Object.entries(PUZZLE_LEVELS) as [PuzzleDifficulty,typeof level][]).map(([id,item])=><button key={id} className={difficulty===id?'active':''} onClick={()=>setDifficulty(id)}><small>{item.short}</small><b>{item.label}</b></button>)}</nav>
     <section className="difficulty-copy"><div className={`difficulty-mark ${difficulty}`}>{level.plies}</div><div><h2>{level.short} · {level.label}</h2><p>{level.description}</p></div></section>
-    <section className="puzzle-list">{items.map((item,index)=><button key={item.id} className={`puzzle-card ${completed.has(item.id)?'completed':''}`} onClick={()=>setSelected(item)}><span className="puzzle-number">{completed.has(item.id)?'✓':index+1}</span><span><b>{item.title}</b><small>{item.mission}</small></span><em>{item.plies}手</em><i>›</i></button>)}</section>
+    <section className="puzzle-list">{items.map((item,index)=><button key={item.id} className={`puzzle-card ${completed.has(item.id)?'completed':''}`} onClick={()=>setSelected(item)}><span className="puzzle-number">{completed.has(item.id)?'✓':index+1}</span><span><b>{item.title}</b><small>{item.mission.replace('ライオン',names.lion)}</small></span><em>{item.plies}手</em><i>›</i></button>)}</section>
     <p className="puzzle-note">問題と相手の応手は、すべて端末の中で動きます。</p>
   </main>
 }
@@ -216,7 +217,7 @@ function PuzzlePlay({puzzle,variant,names,pieceSet,pieceRoot,onBack,onComplete}:
       </section>
       <section className={`puzzle-guide ${feedback??''} ${solved?'solved':''}`} aria-live="polite">
         {solved?<><div className="puzzle-celebrate">🎉</div><span>クリア！</span><h1>{attempts?'あきらめずに見つけたね！':'読み切ったね！'}</h1><p>{puzzle.plies}手の詰みを完成させました。別の問題にも挑戦してみよう。</p><div className="puzzle-guide-actions"><button className="primary" onClick={onBack}>問題一覧へ</button><button onClick={resetPuzzle}>もう一度</button></div></>:<>
-          <span className="puzzle-guide-label">今回のミッション</span><h1>{puzzle.mission}</h1>
+          <span className="puzzle-guide-label">今回のミッション</span><h1>{puzzle.mission.replace('ライオン',names.lion)}</h1>
           <p>{feedback==='wrong'?'その手では、相手に逃げ道が残るよ。別の手を考えてみよう。':feedback==='good'?'いい王手！ 相手の返しも見てみよう。':feedback==='your-turn'?'相手が逃げたよ。次の一手で追いかけよう。':'下側の自分の駒を選んで、行き先をタップしよう。'}</p>
           {hintStage>=2&&answerText&&<div className="puzzle-answer">{answerText}</div>}
           <div className="puzzle-guide-actions"><button onClick={()=>setHintStage(stage=>Math.min(2,stage+1))} disabled={thinking||hintStage>=2}>{hintStage===0?'動かす駒のヒント':hintStage===1?'行き先も見る':'答えを表示中'}</button><button onClick={resetPuzzle}>最初から</button></div>
