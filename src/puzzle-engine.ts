@@ -1,6 +1,8 @@
 import {apply,isCheckmate,isInCheck,legal,positionKey,type Move,type Position,type Side} from './game.ts'
 
 const distanceCache=new Map<string,number|null>()
+const moveKey=(move:Move)=>`${move.from??''}:${move.hand??''}:${move.to}:${move.piece}:${move.promote?1:0}`
+const uniqueMoves=(moves:Move[])=>[...new Map(moves.map(move=>[moveKey(move),move])).values()]
 
 export function applyPuzzle(position:Position,move:Move){
   const target=position.board[move.to],next=apply(position,move,false)
@@ -24,7 +26,7 @@ export function puzzleMateDistance(position:Position,attacker:Side,depth:number)
   if(depth<=0)return null
   const cacheKey=`${positionKey(position)}|${attacker}|${depth}`,cached=distanceCache.get(cacheKey)
   if(cached!==undefined||distanceCache.has(cacheKey))return cached??null
-  const moves=legal(position)
+  const moves=uniqueMoves(legal(position))
   let result:number|null=null
   if(position.turn===attacker){
     const wins=moves.filter(move=>isPuzzleCheckingMove(position,move)).map(move=>puzzleMateDistance(applyPuzzle(position,move),attacker,depth-1)).filter((distance):distance is number=>distance!==null)
@@ -38,7 +40,7 @@ export function puzzleMateDistance(position:Position,attacker:Side,depth:number)
 }
 
 export function puzzleWinningMoves(position:Position,attacker:Side,remaining:number){
-  return legal(position).filter(move=>isPuzzleCheckingMove(position,move)).filter(move=>{
+  return uniqueMoves(legal(position)).filter(move=>isPuzzleCheckingMove(position,move)).filter(move=>{
     const distance=puzzleMateDistance(applyPuzzle(position,move),attacker,remaining-1)
     return distance!==null&&distance<=remaining-1
   })

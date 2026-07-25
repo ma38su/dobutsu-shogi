@@ -144,9 +144,9 @@ test('王手でない応手なしの手を詰みと表示しない', async ({ pa
 
   await page.goto('/okashi/')
   await page.getByRole('button', { name: /詰将棋に挑戦/ }).click()
-  await page.getByRole('button', { name: /パワーアップで 詰み/ }).click()
-  await page.getByRole('button', { name: '3三 パフェ', exact: true }).click()
-  await page.getByRole('button', { name: '2四 プリン', exact: true }).click()
+  await page.getByRole('button', { name: /ちゅうおうへ ななめ/ }).click()
+  await page.getByRole('button', { name: '2三 パフェ', exact: true }).click()
+  await page.getByRole('button', { name: '1三 空き', exact: true }).click()
 
   await expect(page.getByText('不正解：王手ではありません')).toBeVisible()
   await expect(page.getByText('王手になっていません', { exact: true })).toBeVisible()
