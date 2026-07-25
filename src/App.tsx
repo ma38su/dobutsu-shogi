@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import AiWorker from './ai.worker?worker&inline'
 import type {AiSearchStats} from './ai-engine'
-import {apply,attacked,clone,legal,other,pseudo,vec,type Kind,type Move,type Position,type Side} from './game'
+import {apply,attacked,clone,isInCheck,legal,other,pseudo,vec,type Kind,type Move,type Position,type Side} from './game'
 import {applyPuzzle,puzzleMateDistance,puzzleWinningMoves} from './puzzle-engine'
 import {PUZZLES,PUZZLE_LEVELS,type PuzzleDefinition,type PuzzleDifficulty} from './puzzles'
 import {buildReview,immediateWinningMoves,type ReviewMoment} from './review-engine'
@@ -99,11 +99,41 @@ function PuzzleMode({variant,names,pieceSet,setPieceSet,pieceRoot,onExit}:{varia
 }
 function PuzzlePlay({puzzle,variant,names,pieceSet,pieceRoot,onBack,onNext,onComplete}:{puzzle:PuzzleDefinition;variant:AppVariant;names:Record<Kind,string>;pieceSet:PieceSet;pieceRoot:string;onBack:()=>void;onNext?:()=>void;onComplete:()=>void}){
   const attacker:Side='sente'
-  const[current,setCurrent]=useState(()=>clone(puzzle.position)),[remaining,setRemaining]=useState<number>(puzzle.plies),[selected,setSelected]=useState<{from?:number;hand?:Kind}|null>(null),[feedback,setFeedback]=useState<'wrong'|'good'|'your-turn'|null>(null),[hintStage,setHintStage]=useState(0),[thinking,setThinking]=useState(false),[solved,setSolved]=useState(false),[attempts,setAttempts]=useState(0)
-  const allMoves=useMemo(()=>legal(current),[current]),sourceMatches=(m:Move)=>!!selected&&(selected.from!==undefined?m.from===selected.from:m.hand===selected.hand),targets=new Set(selected?allMoves.filter(sourceMatches).map(m=>m.to):[])
-  const winningMoves=current.turn===attacker&&!solved?puzzleWinningMoves(current,attacker,remaining):[],hintMove=winningMoves[0]
+  type WrongPreview={move:Move;reply?:Move;message?:string;done:boolean}
+  const[current,setCurrent]=useState(()=>clone(puzzle.position)),[remaining,setRemaining]=useState<number>(puzzle.plies),[selected,setSelected]=useState<{from?:number;hand?:Kind}|null>(null),[feedback,setFeedback]=useState<'wrong'|'good'|'your-turn'|null>(null),[hintStage,setHintStage]=useState(0),[thinking,setThinking]=useState(false),[solved,setSolved]=useState(false),[attempts,setAttempts]=useState(0),[wrongPreview,setWrongPreview]=useState<WrongPreview|null>(null)
+  const userMoves=useMemo(()=>pseudo(current),[current]),sourceMatches=(m:Move)=>!!selected&&(selected.from!==undefined?m.from===selected.from:m.hand===selected.hand),targets=new Set(selected?userMoves.filter(sourceMatches).map(m=>m.to):[])
+  const winningMoves=current.turn===attacker&&!solved&&!wrongPreview?puzzleWinningMoves(current,attacker,remaining):[],hintMove=winningMoves[0]
   useEffect(()=>{
-    if(solved||current.winner||current.turn===attacker){setThinking(false);return}
+    if(solved||current.winner||current.turn===attacker||wrongPreview?.done){setThinking(false);return}
+    if(wrongPreview){
+      setThinking(true)
+      const timer=window.setTimeout(()=>{
+        const replies=legal(current),checked=isInCheck(current,current.turn)
+        const attackerLion=current.board.findIndex(piece=>piece?.side===attacker&&piece.kind==='lion')
+        const lionCapture=attackerLion>=0?pseudo(current).find(move=>move.to===attackerLion&&move.captured==='lion'):undefined
+        const lionReplies=replies.filter(move=>move.piece==='lion')
+        const checkerCaptures=replies.filter(move=>move.to===wrongPreview.move.to&&move.captured)
+        const choice=lionCapture??(checked?lionReplies[0]??checkerCaptures[0]:lionReplies[0])??replies[0]
+        if(!choice){
+          setWrongPreview(preview=>preview?{...preview,done:true,message:`その手は${names.lion}への王手になっていません。相手に合法手はありませんが、王手ではないため詰みではありません。`}:preview)
+          setThinking(false)
+          return
+        }
+        const replyText=note(choice,names),destination=squareName(choice.to)
+        const action=choice.captured==='lion'
+          ?`${names[choice.piece]}が ${destination} で、こちらの${names.lion}を取れます。`
+          :choice.piece==='lion'
+          ?choice.captured?`${names.lion}が ${destination} で王手した駒を取れます。`:`${names.lion}が ${destination} へ逃げられます。`
+          :choice.captured?`${names[choice.piece]}が ${destination} で王手した駒を取れます。`
+          :choice.hand?`${names[choice.piece]}を ${destination} へ打って応じられます。`
+          :`${names[choice.piece]}を ${destination} へ動かして応じられます。`
+        const message=`${checked?'王手はかかりましたが、':'その手は王手になっていません。'}${action}`
+        setCurrent(applyPuzzle(current,choice))
+        setWrongPreview(preview=>preview?{...preview,reply:choice,message:`${message} 実際の応手は「${replyText}」です。`,done:true}:preview)
+        setFeedback('wrong');setThinking(false)
+      },620)
+      return()=>window.clearTimeout(timer)
+    }
     setThinking(true)
     const timer=window.setTimeout(()=>{
       const choices=legal(current).map(move=>({move,distance:puzzleMateDistance(applyPuzzle(current,move),attacker,remaining-1)})).sort((a,b)=>(b.distance??999)-(a.distance??999))
@@ -112,14 +142,20 @@ function PuzzlePlay({puzzle,variant,names,pieceSet,pieceRoot,onBack,onNext,onCom
       setThinking(false)
     },520)
     return()=>window.clearTimeout(timer)
-  },[current,remaining,solved])
-  const resetPuzzle=()=>{setCurrent(clone(puzzle.position));setRemaining(puzzle.plies);setSelected(null);setFeedback(null);setHintStage(0);setThinking(false);setSolved(false);setAttempts(0)}
+  },[current,remaining,solved,wrongPreview,names])
+  const resetPuzzle=()=>{setCurrent(clone(puzzle.position));setRemaining(puzzle.plies);setSelected(null);setFeedback(null);setHintStage(0);setThinking(false);setSolved(false);setAttempts(0);setWrongPreview(null)}
   const chooseSquare=(to:number)=>{
-    if(thinking||solved||current.turn!==attacker)return
+    if(thinking||solved||wrongPreview||current.turn!==attacker)return
     if(selected){
-      const choice=allMoves.find(move=>move.to===to&&sourceMatches(move))
+      const choice=userMoves.find(move=>move.to===to&&sourceMatches(move))
       if(choice){
-        if(!winningMoves.some(move=>movesEqual(move,choice))){setFeedback('wrong');setAttempts(value=>value+1);setSelected(null);setHintStage(0);return}
+        if(!winningMoves.some(move=>movesEqual(move,choice))){
+          setFeedback('wrong');setAttempts(value=>value+1);setSelected(null);setHintStage(0)
+          if(puzzle.plies===1){
+            setCurrent(apply(current,choice,false));setWrongPreview({move:choice,done:false});setThinking(true)
+          }
+          return
+        }
         const next=applyPuzzle(current,choice)
         setCurrent(next);setRemaining(value=>value-1);setSelected(null);setFeedback('good');setHintStage(0)
         if(next.winner===attacker){setSolved(true);onComplete()}
@@ -131,17 +167,18 @@ function PuzzlePlay({puzzle,variant,names,pieceSet,pieceRoot,onBack,onNext,onCom
     setFeedback(null)
   }
   const answerText=hintMove?(hintMove.hand?`${names[hintMove.piece]}を持ち駒から ${squareName(hintMove.to)} へ置こう`:`${squareName(hintMove.from!)} の${names[hintMove.piece]}を ${squareName(hintMove.to)} へ動かそう`):''
-  return <main className={`puzzle-play-shell ${variant}`}>
+  return <main className={`puzzle-play-shell ${variant} ${solved?'puzzle-outcome-clear':wrongPreview?.done?'puzzle-outcome-wrong':''}`}>
+    {(solved||wrongPreview?.done)&&<div className={`puzzle-outcome-effect ${solved?'clear':'wrong'}`} aria-hidden="true">{solved?<>{Array.from({length:12},(_,index)=><i key={index}/>)}</>:<b>×</b>}</div>}
     <header className="puzzle-play-header"><button onClick={onBack}>← 問題一覧</button><div><b>{PUZZLE_LEVELS[puzzle.difficulty].short}</b><span>{puzzle.title}</span></div><button onClick={resetPuzzle}>やり直す</button></header>
     <div className="puzzle-play-layout">
       <section className="puzzle-game">
-        <div className="puzzle-status"><span className={`difficulty-pill ${puzzle.difficulty}`}>{PUZZLE_LEVELS[puzzle.difficulty].label}</span><b>{solved?'詰み！':thinking?'相手が考えています…':`${remaining}手以内に詰ませよう`}</b></div>
+        <div className="puzzle-status"><span className={`difficulty-pill ${puzzle.difficulty}`}>{PUZZLE_LEVELS[puzzle.difficulty].label}</span><b>{solved?'詰み！':wrongPreview?.done?(wrongPreview.reply?'不正解：応手があります':'不正解：王手ではありません'):wrongPreview?'相手が応手しています…':thinking?'相手が考えています…':`${remaining}手以内に詰ませよう`}</b></div>
         <PuzzleHand side="gote" position={current} selected={selected} setSelected={setSelected} disabled pieceSet={pieceSet} pieceRoot={pieceRoot} names={names}/>
-        <div className="board puzzle-board">{current.board.map((piece,i)=><button key={i} onClick={()=>chooseSquare(i)} className={`square ${(Math.floor(i/3)+i%3)%2?'shade':''} ${selected?.from===i?'chosen':''} ${targets.has(i)?'target':''} ${hintStage>=1&&hintMove?.from===i?'puzzle-hint-source':''} ${hintStage>=2&&hintMove?.to===i?'puzzle-hint-target':''}`} aria-label={`${squareName(i)} ${piece?names[piece.kind]:'空き'}`}>{piece&&<><MovementGuides kind={piece.kind} side={piece.side}/><div className={`piece ${piece.side}`}><PieceIcon kind={piece.kind} pieceSet={pieceSet} pieceRoot={pieceRoot}/></div></>}</button>)}</div>
-        <PuzzleHand side="sente" position={current} selected={selected} setSelected={value=>{if(!thinking&&!solved&&current.turn===attacker){setSelected(value);setFeedback(null)}}} disabled={thinking||solved||current.turn!==attacker} pieceSet={pieceSet} pieceRoot={pieceRoot} names={names} hintKind={hintStage>=1?hintMove?.hand:undefined}/>
+        <div className="board puzzle-board">{current.board.map((piece,i)=><button key={i} onClick={()=>chooseSquare(i)} className={`square ${(Math.floor(i/3)+i%3)%2?'shade':''} ${selected?.from===i?'chosen':''} ${targets.has(i)?'target':''} ${hintStage>=1&&hintMove?.from===i?'puzzle-hint-source':''} ${hintStage>=2&&hintMove?.to===i?'puzzle-hint-target':''} ${wrongPreview?.move.to===i?'puzzle-wrong-move':''} ${wrongPreview?.reply?.from===i?'puzzle-reply-source':''} ${wrongPreview?.reply?.to===i?'puzzle-reply-target':''}`} aria-label={`${squareName(i)} ${piece?names[piece.kind]:'空き'}`}>{piece&&<><MovementGuides kind={piece.kind} side={piece.side}/><div className={`piece ${piece.side}`}><PieceIcon kind={piece.kind} pieceSet={pieceSet} pieceRoot={pieceRoot}/></div></>}</button>)}</div>
+        <PuzzleHand side="sente" position={current} selected={selected} setSelected={value=>{if(!thinking&&!solved&&!wrongPreview&&current.turn===attacker){setSelected(value);setFeedback(null)}}} disabled={thinking||solved||!!wrongPreview||current.turn!==attacker} pieceSet={pieceSet} pieceRoot={pieceRoot} names={names} hintKind={hintStage>=1?hintMove?.hand:undefined}/>
       </section>
-      <section className={`puzzle-guide ${feedback??''} ${solved?'solved':''}`} aria-live="polite">
-        {solved?<><div className="puzzle-celebrate">🎉</div><span>クリア！</span><h1>{attempts?'あきらめずに見つけたね！':'読み切ったね！'}</h1><p>{puzzle.plies}手の詰みを完成させました。別の問題にも挑戦してみよう。</p><div className="puzzle-guide-actions"><button className="primary next-puzzle" onClick={onNext??onBack}>{onNext?'つぎの問題へ →':'全問クリア！ 問題一覧へ'}</button><button onClick={onBack}>問題一覧</button><button onClick={resetPuzzle}>もう一度</button></div></>:<>
+      <section className={`puzzle-guide ${feedback??''} ${solved?'solved':''} ${wrongPreview?'wrong-preview':''}`} aria-live="polite">
+        {solved?<><div className="puzzle-celebrate">🎉</div><span>クリア！</span><h1>{attempts?'あきらめずに見つけたね！':'読み切ったね！'}</h1><p>{puzzle.plies}手の詰みを完成させました。別の問題にも挑戦してみよう。</p><div className="puzzle-guide-actions"><button className="primary next-puzzle" onClick={onNext??onBack}>{onNext?'つぎの問題へ →':'全問クリア！ 問題一覧へ'}</button><button onClick={onBack}>問題一覧</button><button onClick={resetPuzzle}>もう一度</button></div></>:wrongPreview?<><div className="puzzle-wrong-mark">×</div><span className="puzzle-wrong-label">{wrongPreview.done?'不正解':'応手を確認中'}</span><h1>{wrongPreview.done?(wrongPreview.reply?'相手に一手返されました':'王手になっていません'):'その手のあとを見てみよう'}</h1><p>{wrongPreview.message??`相手がどう応じるか、盤面で確認しています。`}</p>{wrongPreview.reply&&<div className="puzzle-wrong-reply"><b>相手の応手</b><span>{note(wrongPreview.reply,names)}</span></div>}<div className="puzzle-guide-actions"><button className="primary retry-puzzle" onClick={resetPuzzle} disabled={!wrongPreview.done}>もう一度考える</button><button onClick={onBack}>問題一覧</button></div></>:<>
           <span className="puzzle-guide-label">今回のミッション</span><h1>{puzzle.mission.replace('ライオン',names.lion)}</h1>
           <p>{feedback==='wrong'?'その手では、相手に逃げ道が残るよ。別の手を考えてみよう。':feedback==='good'?'いい王手！ 相手の返しも見てみよう。':feedback==='your-turn'?'相手が逃げたよ。次の一手で追いかけよう。':'下側の自分の駒を選んで、行き先をタップしよう。'}</p>
           {hintStage>=2&&answerText&&<div className="puzzle-answer">{answerText}</div>}

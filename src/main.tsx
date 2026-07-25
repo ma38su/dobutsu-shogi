@@ -20,14 +20,16 @@ createRoot(document.getElementById('root')!).render(
 
 if ((route === 'okashi' || route === 'samurai') && 'serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('./sw.js').then(async () => {
-      const legacyScope = new URL('../', window.location.href).href
+    void navigator.serviceWorker.register('../sw.js').then(async (rootRegistration) => {
+      const gameScope = new URL('./', window.location.href).href
       const registrations = await navigator.serviceWorker.getRegistrations()
       await Promise.all(
         registrations
-          .filter(registration => registration.scope === legacyScope)
+          .filter(registration =>
+            registration.scope === gameScope && registration.scope !== rootRegistration.scope,
+          )
           .map(registration => registration.unregister()),
       )
-    })
+    }).catch(() => undefined)
   })
 }
