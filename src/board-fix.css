@@ -552,6 +552,26 @@
   box-shadow: inset 0 0 0 6px #f1a82f;
 }
 
+.review-board .square.review-source::after,
+.review-hand button.review-source::after {
+  position: absolute;
+  z-index: 7;
+  top: 7px;
+  left: 7px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  color: #fff;
+  background: #e48b25;
+  box-shadow: 0 3px 8px rgba(126, 76, 21, .3);
+  content: '1';
+  font-size: 17px;
+  font-weight: 900;
+}
+
 .review-board .square.review-answer::after {
   position: absolute;
   z-index: 6;
@@ -564,8 +584,9 @@
   color: #fff;
   background: #3d9361;
   box-shadow: 0 3px 8px rgba(38, 91, 58, .35);
-  content: '★';
+  content: '2';
   font-size: clamp(20px, 7vw, 36px);
+  font-weight: 900;
 }
 
 @keyframes review-pulse {
@@ -578,8 +599,21 @@
 }
 
 .review-hand button {
+  position: relative;
   min-width: 44px;
   min-height: 44px;
+}
+
+.review-hand button.review-hint {
+  animation: review-pulse 1s ease-in-out infinite alternate;
+}
+
+.review-hand button.review-source::after {
+  top: -4px;
+  left: -4px;
+  width: 25px;
+  height: 25px;
+  font-size: 13px;
 }
 
 .coach-panel {
@@ -667,21 +701,105 @@
   background: #e8f0ff;
 }
 
-.speech p {
-  margin: 0;
-  font-size: clamp(17px, 4.3vw, 23px);
-  font-weight: 800;
-  line-height: 1.65;
+.lesson-label {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #784d23;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.lesson-label.mate1 {
+  color: #fff;
+  background: #d9533f;
+}
+
+.lesson-label.escape {
+  color: #fff;
+  background: #397f64;
+}
+
+.speech h2 {
+  margin: 10px 0 12px;
+  font-size: clamp(19px, 4.8vw, 26px);
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 
-.speech small {
+.lesson-instruction {
+  margin: 0;
+  color: #725c46;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.75;
+}
+
+.move-guide {
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border: 2px dashed #cf9849;
+  border-radius: 12px;
+  color: #70451e;
+  background: rgba(255, 255, 255, .65);
+  font-size: 13px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.answer-explanation ol {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.answer-explanation li {
+  display: grid;
+  grid-template-columns: 31px 1fr;
+  align-items: start;
+  gap: 9px;
+  padding: 10px;
+  border-radius: 13px;
+  color: #5e4b3a;
+  background: rgba(255, 255, 255, .72);
+}
+
+.answer-explanation li > span {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  color: #fff;
+  background: #d67a39;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.answer-explanation li:nth-child(2) > span {
+  background: #568d68;
+}
+
+.answer-explanation li:nth-child(3) > span {
+  background: #8566a7;
+}
+
+.answer-explanation li b {
   display: block;
-  margin-top: 12px;
-  color: #8b745f;
+  margin-bottom: 2px;
   font-size: 11px;
-  font-weight: 700;
-  line-height: 1.5;
+}
+
+.answer-explanation li p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 
 .review-actions {
@@ -827,7 +945,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .review-board .square.review-hint {
+  .review-board .square.review-hint,
+  .review-hand button.review-hint {
     animation: none;
     box-shadow: inset 0 0 0 6px #f0a42b;
   }
