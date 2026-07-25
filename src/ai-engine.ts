@@ -1,4 +1,4 @@
-import {V,apply,legal,other,positionKey,score,vec,type Move,type Position,type Side} from './game'
+import {V,apply,isCheckmate,legal,other,positionKey,score,vec,type Move,type Position,type Side} from './game'
 
 type SearchBound='exact'|'lower'|'upper'
 type SearchEntry={value:number;bound:SearchBound;bestMove?:Move}
@@ -67,7 +67,7 @@ export function chooseAiMove(position:Position,level:number):AiSearchResult{
     }
 
     const candidates=legal(current)
-    if(!candidates.length)return terminalValue(other(current.turn),ply)
+    if(!candidates.length)return isCheckmate(current)?terminalValue(other(current.turn),ply):0
 
     let value=current.turn===root?-Infinity:Infinity,bestMove:Move|undefined
     if(current.turn===root){

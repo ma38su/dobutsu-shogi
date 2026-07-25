@@ -1,4 +1,4 @@
-import {V,apply,attacked,legal,other,score,type Move,type Position,type Side} from './game'
+import {V,apply,attacked,isCheckmate,legal,other,score,type Move,type Position,type Side} from './game'
 
 export type ReviewKind='praise'|'mate1'|'escape'|'capture'|'try'|'safety'|'choice'
 export type ReviewMoment={moveIndex:number;position:Position;played:Move;best:Move;goodMoves:Move[];loss:number;kind:ReviewKind}
@@ -23,7 +23,7 @@ function reviewScore(position:Position,root:Side){
 function reviewSearch(position:Position,depth:number,root:Side,alpha=-Infinity,beta=Infinity):number{
   if(!depth||position.winner)return reviewScore(position,root)
   const moves=legal(position)
-  if(!moves.length)return position.turn===root?-90000:90000
+  if(!moves.length)return isCheckmate(position)?(position.turn===root?-90000:90000):0
   if(position.turn===root){
     let value=-Infinity
     for(const move of moves){

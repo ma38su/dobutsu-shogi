@@ -1,30 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {AiSearchStats} from './ai-engine'
-import {apply,attacked,clone,legal,other,pseudo,vec,type Kind,type Move,type Piece,type Position,type Side} from './game'
+import {apply,attacked,clone,legal,other,pseudo,vec,type Kind,type Move,type Position,type Side} from './game'
 import {applyPuzzle,puzzleMateDistance,puzzleWinningMoves} from './puzzle-engine'
+import {PUZZLES,PUZZLE_LEVELS,type PuzzleDefinition,type PuzzleDifficulty} from './puzzles'
 import {buildReview,immediateWinningMoves,type ReviewMoment} from './review-engine'
 import './App.css'
 import './board-fix.css'
-type RuleMode='normal'|'beginner'; type PieceSet='wagashi'|'western'|'mix'; type VisualTheme='sweets'; type AppMode='menu'|'battle'|'puzzle'; type PuzzleDifficulty='starter'|'stepup'|'challenge'; export type AppVariant='okashi'|'samurai'; type PuzzleDefinition={id:string;difficulty:PuzzleDifficulty;title:string;mission:string;plies:1|3|5;position:Position}
+type RuleMode='normal'|'beginner'; type PieceSet='wagashi'|'western'|'mix'; type VisualTheme='sweets'; type AppMode='menu'|'battle'|'puzzle'; export type AppVariant='okashi'|'samurai'
 type AiDebugResult={move?:Move;stats:AiSearchStats}
-const F=['1','2','3'],R=['一','二','三','四']; const L:Record<PieceSet,Record<Kind,string>>={wagashi:{lion:'あんみつ',giraffe:'だんご',elephant:'さくらもち',chick:'こんぺいとう',hen:'花こんぺいとう'},western:{lion:'ケーキ',giraffe:'エクレア',elephant:'マカロン',chick:'ジェリー',hen:'キャンディ'},mix:{lion:'パフェ',giraffe:'プリン',elephant:'いちご大福',chick:'クッキー',hen:'王冠クッキー'}}
+const F=['1','2','3'],R=['一','二','三','四']; const L:Record<PieceSet,Record<Kind,string>>={wagashi:{lion:'あんみつ',giraffe:'だんご',elephant:'さくらもち',chick:'こんぺいとう',hen:'花こんぺいとう'},western:{lion:'ケーキ',giraffe:'エクレア',elephant:'カップケーキ',chick:'マカロン',hen:'キャンディ'},mix:{lion:'パフェ',giraffe:'プリン',elephant:'いちご大福',chick:'クッキー',hen:'王冠クッキー'}}
 const VISUAL_THEMES:Record<VisualTheme,{label:string;pieceRoot:string}>={sweets:{label:'おかし',pieceRoot:'./pieces/sweets'}}
 const SAMURAI_NAMES:Record<Kind,string>={lion:'大将',giraffe:'槍武者',elephant:'弓武者',chick:'足軽',hen:'若武者'}
 const INITIAL:Position={board:[{side:'gote',kind:'giraffe'},{side:'gote',kind:'lion'},{side:'gote',kind:'elephant'},null,{side:'gote',kind:'chick'},null,null,{side:'sente',kind:'chick'},null,{side:'sente',kind:'elephant'},{side:'sente',kind:'lion'},{side:'sente',kind:'giraffe'}],hands:{sente:[],gote:[]},turn:'sente'}
-const S=(kind:Kind):Piece=>({side:'sente',kind}),G=(kind:Kind):Piece=>({side:'gote',kind})
-const puzzle=(id:string,difficulty:PuzzleDifficulty,title:string,mission:string,plies:1|3|5,board:(Piece|null)[],sente:Kind[]=[],gote:Kind[]=[]):PuzzleDefinition=>({id,difficulty,title,mission,plies,position:{board,hands:{sente,gote},turn:'sente'}})
-const PUZZLES:PuzzleDefinition[]=[
-  puzzle('starter-1','starter','まんなかを ふさごう','もちごまを使って、逃げ道をなくそう',1,[G('giraffe'),G('lion'),null,null,null,S('chick'),G('giraffe'),S('elephant'),S('lion'),null,null,null],['chick','elephant']),
-  puzzle('starter-2','starter','みぎから おさえよう','どの駒をどこに置けば、逃げられないかな？',1,[null,G('giraffe'),G('lion'),G('giraffe'),null,null,null,S('chick'),S('lion'),S('elephant'),null,null],['chick','elephant']),
-  puzzle('starter-3','starter','ななめの いって','斜めに動く駒で、ライオンを追い詰めよう',1,[S('giraffe'),null,null,null,null,G('lion'),S('lion'),S('chick'),null,S('elephant'),S('giraffe'),null],['elephant','chick']),
-  puzzle('stepup-1','stepup','にげた先を ねらおう','相手が逃げても、次の一手でつかまえよう',3,[G('giraffe'),null,null,G('lion'),null,S('chick'),null,null,S('lion'),null,null,null],['elephant','giraffe'],['chick','elephant']),
-  puzzle('stepup-2','stepup','パワーアップの 王手','いちばん奥へ進む駒の変化を使おう',3,[S('giraffe'),null,G('lion'),null,S('chick'),null,S('lion'),S('chick'),null,S('elephant'),null,S('giraffe')],[],['elephant']),
-  puzzle('stepup-3','stepup','ななめから はさもう','持ち駒で相手の行き先をしぼろう',3,[G('lion'),null,null,null,null,S('chick'),S('lion'),null,G('giraffe'),null,null,S('giraffe')],['chick','elephant'],['elephant']),
-  puzzle('challenge-1','challenge','守りを くずそう','守りの駒を取りながら、5手で追い詰めよう',5,[null,G('lion'),G('elephant'),null,null,G('giraffe'),null,S('lion'),S('giraffe'),S('elephant'),null,null],['chick','chick']),
-  puzzle('challenge-2','challenge','しずかな いって','すぐに王手をせず、逃げ道を先に消そう',5,[null,G('lion'),null,G('chick'),null,null,S('giraffe'),null,S('giraffe'),S('lion'),S('elephant'),null],['elephant','chick']),
-  puzzle('challenge-3','challenge','さいごの 包囲網','持ち駒と盤上の駒をつないで包囲しよう',5,[G('giraffe'),null,G('lion'),null,G('elephant'),null,null,S('lion'),null,null,null,null],['chick','giraffe'],['chick','elephant']),
-]
-const PUZZLE_LEVELS:Record<PuzzleDifficulty,{label:string;short:string;description:string;plies:1|3|5}>={starter:{label:'はじめて',short:'1手詰め',description:'一手で逃げ道をなくそう',plies:1},stepup:{label:'ステップアップ',short:'3手詰め',description:'相手の返しを読んでみよう',plies:3},challenge:{label:'チャレンジ',short:'5手詰め',description:'最後まで手順を読み切ろう',plies:5}}
 if(import.meta.env.DEV)PUZZLES.forEach(item=>{const distance=puzzleMateDistance(item.position,'sente',item.plies),shorter=item.plies>1?puzzleMateDistance(item.position,'sente',item.plies-2):null,firstMoves=puzzleWinningMoves(item.position,'sente',item.plies);if(distance!==item.plies||shorter!==null||firstMoves.length!==1)console.error(`Invalid puzzle: ${item.id}`,{distance,shorter,firstMoves})})
 const movesEqual=(a:Move,b:Move)=>a.to===b.to&&a.from===b.from&&a.hand===b.hand&&a.piece===b.piece
 const note=(m:Move,names:Record<Kind,string>)=>`${m.side==='sente'?'▲':'△'}${F[m.to%3]}${R[Math.floor(m.to/3)]} ${names[m.piece]}${m.hand?'打':''}${m.promote?'成':''}`
@@ -87,19 +74,21 @@ function ModeMenu({variant,pieceSet,pieceRoot,onBattle,onPuzzle}:{variant:AppVar
     </section>
     <section className="mode-choices" aria-label="モードを選ぶ">
       <button className="mode-choice battle" onClick={onBattle}><span className="mode-icon">対</span><span><small>AIや家族と勝負</small><b>対局する</b><em>いつもの3×4のしょうぎ</em></span><i>→</i></button>
-      <button className="mode-choice puzzle" onClick={onPuzzle}><span className="mode-icon">詰</span><span><small>ひとりでじっくり</small><b>詰将棋に挑戦</b><em>1手・3手・5手の全9問</em></span><i>→</i></button>
+      <button className="mode-choice puzzle" onClick={onPuzzle}><span className="mode-icon">詰</span><span><small>ひとりでじっくり</small><b>詰将棋に挑戦</b><em>1手・3手・5手の全{PUZZLES.length}問</em></span><i>→</i></button>
     </section>
   </main>
 }
 function PuzzleMode({variant,names,pieceSet,setPieceSet,pieceRoot,onExit}:{variant:AppVariant;names:Record<Kind,string>;pieceSet:PieceSet;setPieceSet:(value:PieceSet)=>void;pieceRoot:string;onExit:()=>void}){
-  const[difficulty,setDifficulty]=useState<PuzzleDifficulty>('starter'),[selected,setSelected]=useState<PuzzleDefinition|null>(null),[completed,setCompleted]=useState<Set<string>>(()=>{try{return new Set(JSON.parse(localStorage.getItem(`${variant}-puzzle-progress`)??'[]') as string[])}catch{return new Set()}})
-  const finish=(id:string)=>{setCompleted(previous=>{const next=new Set(previous).add(id);localStorage.setItem(`${variant}-puzzle-progress`,JSON.stringify([...next]));return next})}
+  const progressKey=`${variant}-puzzle-progress-v2`
+  const[difficulty,setDifficulty]=useState<PuzzleDifficulty>('starter'),[selected,setSelected]=useState<PuzzleDefinition|null>(null),[completed,setCompleted]=useState<Set<string>>(()=>{try{return new Set(JSON.parse(localStorage.getItem(progressKey)??'[]') as string[])}catch{return new Set()}})
+  const finish=(id:string)=>{setCompleted(previous=>{const next=new Set(previous).add(id);localStorage.setItem(progressKey,JSON.stringify([...next]));return next})}
+  useEffect(()=>{if(selected)window.scrollTo({top:0,left:0,behavior:'instant'})},[selected])
   const selectedIndex=selected?PUZZLES.findIndex(item=>item.id===selected.id):-1,nextPuzzle=selectedIndex>=0?PUZZLES[selectedIndex+1]:undefined
   if(selected)return <PuzzlePlay key={selected.id} puzzle={selected} variant={variant} names={names} pieceSet={pieceSet} pieceRoot={pieceRoot} onBack={()=>setSelected(null)} onNext={nextPuzzle?()=>{setDifficulty(nextPuzzle.difficulty);setSelected(nextPuzzle)}:undefined} onComplete={()=>finish(selected.id)}/>
   const level=PUZZLE_LEVELS[difficulty],items=PUZZLES.filter(item=>item.difficulty===difficulty),isSamurai=variant==='samurai'
   return <main className={`puzzle-shell ${variant}`}>
     <header className="puzzle-header"><button onClick={onExit}>← モード選択</button><div><b>{isSamurai?'さむらい詰将棋':'おかし詰将棋'}</b><span>{completed.size} / {PUZZLES.length} クリア</span></div></header>
-    <section className="puzzle-hero"><div><span>ひとりで じっくり</span><h1>詰将棋に挑戦！</h1><p>相手がどこへ逃げても、最後に{names.lion}をつかまえよう。</p></div><div className="puzzle-hero-piece"><PieceIcon kind="lion" pieceSet={pieceSet} pieceRoot={pieceRoot}/></div></section>
+    <section className="puzzle-hero"><div><span>ひとりで じっくり</span><h1>詰将棋に挑戦！</h1><p>王手を続けて、最後に{names.lion}の逃げ道をなくそう。</p></div><div className="puzzle-hero-piece"><PieceIcon kind="lion" pieceSet={pieceSet} pieceRoot={pieceRoot}/></div></section>
     {variant==='okashi'&&<label className="puzzle-piece-set"><span><b>おかしの種類</b><small>好きな見た目で挑戦できます</small></span><select value={pieceSet} onChange={event=>setPieceSet(event.target.value as PieceSet)}><option value="wagashi">和菓子</option><option value="western">洋菓子</option><option value="mix">和洋MIX</option></select></label>}
     <nav className="difficulty-tabs" aria-label="難易度を選ぶ">{(Object.entries(PUZZLE_LEVELS) as [PuzzleDifficulty,typeof level][]).map(([id,item])=><button key={id} className={difficulty===id?'active':''} onClick={()=>setDifficulty(id)}><small>{item.short}</small><b>{item.label}</b></button>)}</nav>
     <section className="difficulty-copy"><div className={`difficulty-mark ${difficulty}`}>{level.plies}</div><div><h2>{level.short} · {level.label}</h2><p>{level.description}</p></div></section>
@@ -166,7 +155,7 @@ function PuzzleHand({side,position,selected,setSelected,disabled,pieceSet,pieceR
 }
 function BoardStylePicker(){return <fieldset className="board-styles"><legend>盤のデザイン</legend><label><input id="board-box" type="radio" name="board-style" defaultChecked/><span>おかし箱</span></label><label><input id="board-wood" type="radio" name="board-style"/><span>木の盤</span></label><label><input id="board-grass" type="radio" name="board-style"/><span>若草</span></label><label><input id="board-ink" type="radio" name="board-style"/><span>墨色</span></label></fieldset>}
 function Player({side,p,thinking,players,setPlayers}:{side:Side;p:Position;thinking:boolean;players:Record<Side,'human'|'ai'>;setPlayers:(v:Record<Side,'human'|'ai'>)=>void}){return <div className={`player ${side} ${p.turn===side?'active':''}`}><div className={`avatar ${side}`}>{side==='sente'?'先':'後'}</div><div className="info"><b>{side==='sente'?'先手':'後手'}</b><span>{p.turn===side?(thinking?'● かんがえ中…':'● 手番です'):'待っています'}</span></div><select aria-label={`${side==='sente'?'先手':'後手'}の担当`} value={players[side]} onChange={e=>setPlayers({...players,[side]:e.target.value as 'human'|'ai'})}><option value="human">👤 人間</option><option value="ai">🤖 AI</option></select></div>}
-function PieceIcon({kind,pieceSet,pieceRoot}:{kind:Kind;pieceSet:PieceSet;pieceRoot:string}){const samuraiFile=kind==='lion'?'lion-mounted-sword':kind;const src=pieceRoot.endsWith('/samurai')?`${pieceRoot}/${samuraiFile}.png?v=3`:`${pieceRoot}/${pieceSet}/${kind}.png?v=7`;return <img className="piece-icon sweet-icon" src={src} alt="" draggable={false}/>}
+function PieceIcon({kind,pieceSet,pieceRoot}:{kind:Kind;pieceSet:PieceSet;pieceRoot:string}){const samuraiFile=kind==='lion'?'lion-mounted-sword':kind;const src=pieceRoot.endsWith('/samurai')?`${pieceRoot}/${samuraiFile}.png?v=3`:`${pieceRoot}/${pieceSet}/${kind}.png?v=8`;return <img className="piece-icon sweet-icon" src={src} alt="" draggable={false}/>}
 function MovementGuides({kind,side}:{kind:Kind;side:Side}){return <span className="movement-guides" aria-hidden="true">{vec(kind,side).map(([dr,dc])=><i key={`${dr},${dc}`} style={{gridRow:dr+2,gridColumn:dc+2,alignSelf:dr<0?'start':dr>0?'end':'center',justifySelf:dc<0?'start':dc>0?'end':'center'}}/>)}</span>}
 function Hand({side,p,sel,setSel,players,pieceSet,names,pieceRoot}:{side:Side;p:Position;sel:{from?:number;hand?:number}|null;setSel:(v:{hand:number})=>void;players:Record<Side,'human'|'ai'>;pieceSet:PieceSet;names:Record<Kind,string>;pieceRoot:string}){return <div className={`hand ${side}`}><span>もちごま</span><div>{p.hands[side].length?p.hands[side].map((k,i)=><button aria-label={names[k]} disabled={p.turn!==side||players[side]==='ai'} onClick={()=>setSel({hand:i})} className={sel?.hand===i&&sel.from===undefined?'selected':''} key={i}><PieceIcon kind={k} pieceSet={pieceSet} pieceRoot={pieceRoot}/></button>):<em>なし</em>}</div></div>}
 type ReviewLesson={title:string;action:string;result:string;reason:string}

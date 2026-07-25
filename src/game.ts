@@ -16,11 +16,11 @@ export function clone(position:Position):Position{
   }
 }
 
-export function positionKey(position:Position){
+export function positionKey(position:Position):string{
   return JSON.stringify([position.board,[...position.hands.sente].sort(),[...position.hands.gote].sort(),position.turn])
 }
 
-export function vec(kind:Kind,side:Side){
+export function vec(kind:Kind,side:Side):number[][]{
   const forward=side==='sente'?-1:1
   if(kind==='lion')return[[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]]
   if(kind==='giraffe')return[[-1,0],[0,-1],[0,1],[1,0]]
@@ -29,7 +29,7 @@ export function vec(kind:Kind,side:Side){
   return[[forward,-1],[forward,0],[forward,1],[0,-1],[0,1],[-forward,0]]
 }
 
-export function pseudo(position:Position,side=position.turn){
+export function pseudo(position:Position,side=position.turn):Move[]{
   const moves:Move[]=[]
   position.board.forEach((piece,from)=>{
     if(!piece||piece.side!==side)return
@@ -55,11 +55,20 @@ export function pseudo(position:Position,side=position.turn){
   return moves
 }
 
-export function attacked(position:Position,square:number,by:Side){
+export function attacked(position:Position,square:number,by:Side):boolean{
   return pseudo({...position,hands:{sente:[],gote:[]}},by).some(move=>move.to===square)
 }
 
-export function apply(position:Position,move:Move,checkWin=true){
+export function isInCheck(position:Position,side=position.turn):boolean{
+  const lion=position.board.findIndex(piece=>piece?.side===side&&piece.kind==='lion')
+  return lion>=0&&attacked(position,lion,other(side))
+}
+
+export function isCheckmate(position:Position):boolean{
+  return isInCheck(position,position.turn)&&legal(position).length===0
+}
+
+export function apply(position:Position,move:Move,checkWin=true):Position{
   const next=clone(position),target=next.board[move.to]
   if(move.from!==undefined)next.board[move.from]=null
   else{
@@ -80,15 +89,15 @@ export function apply(position:Position,move:Move,checkWin=true){
         next.reason='トライに成功しました'
       }
     }
-    if(!next.winner&&legal(next).length===0){
+    if(!next.winner&&isCheckmate(next)){
       next.winner=move.side
-      next.reason='相手に指せる手がありません（詰み）'
+      next.reason='相手のライオンに王手をかけ、逃げ道をなくしました（詰み）'
     }
   }
   return next
 }
 
-export function legal(position:Position){
+export function legal(position:Position):Move[]{
   return pseudo(position).filter(move=>{
     const next=apply(position,move,false)
     const lion=next.board.findIndex(piece=>piece?.side===position.turn&&piece.kind==='lion')

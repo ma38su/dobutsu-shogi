@@ -18,7 +18,7 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
-if (route === 'okashi' && 'serviceWorker' in navigator && import.meta.env.PROD) {
+if ((route === 'okashi' || route === 'samurai') && 'serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js')
   })

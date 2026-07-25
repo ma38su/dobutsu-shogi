@@ -21,6 +21,12 @@ async function expectImagesLoaded(page: Page, selector: string) {
   )).toBe(true)
 }
 
+async function expectPageFitsViewport(page: Page) {
+  await expect.poll(() => page.evaluate(() =>
+    document.documentElement.scrollHeight <= document.documentElement.clientHeight + 1,
+  )).toBe(true)
+}
+
 test('ランチャーから両方のゲームを開ける', async ({ page }) => {
   const errors = captureRuntimeErrors(page)
 
@@ -98,5 +104,52 @@ for (const game of [
     await expect(page.getByRole('button', { name: `2二${game.lion}`, exact: true })).toBeVisible()
 
     expect(errors).toEqual([])
+  })
+}
+
+for (const game of [
+  { path: 'okashi', name: 'おかししょうぎ' },
+  { path: 'samurai', name: 'さむらいしょうぎ' },
+]) {
+  test(`${game.name}に独立したPWA設定がある`, async ({ page, request }) => {
+    await page.goto(`/${game.path}/`)
+
+    await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', './manifest.webmanifest')
+    await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute('href', './apple-touch-icon.png')
+
+    const manifestResponse = await request.get(`/${game.path}/manifest.webmanifest`)
+    expect(manifestResponse.ok()).toBe(true)
+    const manifest = await manifestResponse.json()
+    expect(manifest.name).toBe(game.name)
+    expect(manifest.id).toBe('./')
+    expect(manifest.display).toBe('standalone')
+
+    for (const asset of ['apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'sw.js']) {
+      expect((await request.get(`/${game.path}/${asset}`)).ok()).toBe(true)
+    }
+  })
+}
+
+for (const device of [
+  { name: 'Android 360×800', width: 360, height: 800, path: 'okashi' },
+  { name: 'Android 412×915', width: 412, height: 915, path: 'samurai' },
+  { name: 'iPad 768×1024', width: 768, height: 1024, path: 'okashi' },
+  { name: 'iPad Pro 1024×1366', width: 1024, height: 1366, path: 'samurai' },
+]) {
+  test(`${device.name}の縦画面に対局と詰将棋が収まる`, async ({ page }) => {
+    await page.setViewportSize({ width: device.width, height: device.height })
+
+    await page.goto(`/${device.path}/`)
+    await page.getByRole('button', { name: /対局する/ }).click()
+    await expect(page.locator('.game-card')).toBeVisible()
+    await expect(page.locator('.controls')).toBeVisible()
+    await expectPageFitsViewport(page)
+
+    await page.goto(`/${device.path}/`)
+    await page.getByRole('button', { name: /詰将棋に挑戦/ }).click()
+    await page.getByRole('button', { name: /まんなかを ふさごう/ }).click()
+    await expect(page.locator('.puzzle-game')).toBeVisible()
+    await expect(page.locator('.puzzle-guide')).toBeVisible()
+    await expectPageFitsViewport(page)
   })
 }

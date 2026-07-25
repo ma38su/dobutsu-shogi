@@ -11,7 +11,7 @@ export default function Launcher() {
     <section className="app-choices" aria-label="アプリを選ぶ">
       <a className="app-choice okashi-choice" href={`${base}okashi/`}>
         <span className="choice-pattern" aria-hidden="true" />
-        <span className="choice-art"><img src={`${base}pieces/sweets/mix/lion.png?v=7`} alt=""/><img src={`${base}pieces/sweets/mix/chick.png?v=7`} alt=""/></span>
+        <span className="choice-art"><img src={`${base}pieces/sweets/mix/lion.png?v=8`} alt=""/><img src={`${base}pieces/sweets/mix/chick.png?v=8`} alt=""/></span>
         <span className="choice-copy"><span className="choice-label">おかしの国</span><b>おかししょうぎ</b><small>かわいいおかしで対局しよう</small><span className="choice-action">あそぶ <i aria-hidden="true">→</i></span></span>
       </a>
       <a className="app-choice samurai-choice" href={`${base}samurai/`}>

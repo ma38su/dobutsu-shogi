@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "npm run build && playwright test",
+    "test:puzzles": "node --experimental-strip-types scripts/validate-puzzles.mjs",
+    "test": "npm run build && npm run test:puzzles && playwright test",
     "check": "npm run lint && npm test"
   },
   "dependencies": {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'okashi-shogi-subpath-v4'
+const CACHE_NAME = 'samurai-shogi-subpath-v1'
 const APP_SHELL = [
   './',
   './index.html',
@@ -7,21 +7,13 @@ const APP_SHELL = [
   './icon-192.png',
   './icon-512.png',
   './icon-maskable-512.png',
-  '../pieces/sweets/wagashi/lion.png',
-  '../pieces/sweets/wagashi/giraffe.png',
-  '../pieces/sweets/wagashi/elephant.png',
-  '../pieces/sweets/wagashi/chick.png',
-  '../pieces/sweets/wagashi/hen.png',
-  '../pieces/sweets/western/lion.png',
-  '../pieces/sweets/western/giraffe.png',
-  '../pieces/sweets/western/elephant.png',
-  '../pieces/sweets/western/chick.png',
-  '../pieces/sweets/western/hen.png',
-  '../pieces/sweets/mix/lion.png',
-  '../pieces/sweets/mix/giraffe.png',
-  '../pieces/sweets/mix/elephant.png',
-  '../pieces/sweets/mix/chick.png',
-  '../pieces/sweets/mix/hen.png',
+  '../pieces/samurai/lion.png',
+  '../pieces/samurai/lion-mounted.png',
+  '../pieces/samurai/lion-mounted-sword.png',
+  '../pieces/samurai/giraffe.png',
+  '../pieces/samurai/elephant.png',
+  '../pieces/samurai/chick.png',
+  '../pieces/samurai/hen.png',
 ]
 
 self.addEventListener('install', (event) => {
@@ -31,7 +23,7 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(caches.keys().then((keys) => Promise.all(
-    keys.filter((key) => key.startsWith('okashi-shogi-subpath-') && key !== CACHE_NAME).map((key) => caches.delete(key)),
+    keys.filter((key) => key.startsWith('samurai-shogi-subpath-') && key !== CACHE_NAME).map((key) => caches.delete(key)),
   )))
   self.clients.claim()
 })
