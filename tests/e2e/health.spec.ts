@@ -47,6 +47,8 @@ test('ランチャーから両方のゲームを開ける', async ({ page }) => 
   await expect(page.getByRole('heading', { name: 'どちらであそぶ？' })).toBeVisible()
   await expect(page.getByRole('link', { name: /おかししょうぎ/ })).toHaveAttribute('href', /\/okashi\/$/)
   await expect(page.getByRole('link', { name: /さむらいしょうぎ/ })).toHaveAttribute('href', /\/samurai\/$/)
+  await expect(page.locator('.okashi-choice .choice-art img').nth(0)).toHaveAttribute('src', /\/pieces\/sweets\/wagashi\/lion\.png/)
+  await expect(page.locator('.okashi-choice .choice-art img').nth(1)).toHaveAttribute('src', /\/pieces\/sweets\/wagashi\/chick\.png/)
   await expectImagesLoaded(page, '.choice-art img')
   expect(errors).toEqual([])
 })
@@ -57,11 +59,47 @@ test('AIが先手の着手に応手する', async ({ page }) => {
   await page.goto('/okashi/')
   await page.getByRole('button', { name: /対局する/ }).click()
 
-  await page.getByRole('button', { name: '2三クッキー', exact: true }).click()
-  await page.getByRole('button', { name: '2二クッキー', exact: true }).click()
+  await page.getByRole('button', { name: '2三こんぺいとう', exact: true }).click()
+  await page.getByRole('button', { name: '2二こんぺいとう', exact: true }).click()
 
   await expect(page.locator('.timeline')).toContainText('2 / 2 手', { timeout: 10_000 })
   await expect(page.getByText('● 手番です')).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('おかしの種類を切り替えると対局と詰将棋の駒・名前が揃って変わる', async ({ page }) => {
+  const errors = captureRuntimeErrors(page)
+
+  await page.goto('/okashi/')
+  await page.getByRole('button', { name: /対局する/ }).click()
+
+  const battlePieceSet = page.locator('.setting').filter({ hasText: 'おかしの種類' }).locator('select')
+  await expect(battlePieceSet).toHaveValue('wagashi')
+  await expect(page.getByRole('button', { name: '2四あんみつ', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '2四あんみつ', exact: true }).locator('img')).toHaveAttribute('src', /\/wagashi\/lion\.png/)
+
+  await battlePieceSet.selectOption('western')
+  await expect(page.getByRole('button', { name: '2四ケーキ', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '2三マカロン', exact: true }).locator('img')).toHaveAttribute('src', /\/western\/chick\.png/)
+  await expect(page.locator('.setting').filter({ hasText: '対局モード' })).toContainText('ケーキが取られる手を指すと負けです')
+
+  await battlePieceSet.selectOption('mix')
+  await expect(page.getByRole('button', { name: '2四パフェ', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '2三クッキー', exact: true }).locator('img')).toHaveAttribute('src', /\/mix\/chick\.png/)
+
+  await page.getByRole('button', { name: 'モード選択' }).click()
+  await page.getByRole('button', { name: /詰将棋に挑戦/ }).click()
+
+  const puzzlePieceSet = page.locator('.puzzle-piece-set select')
+  await expect(puzzlePieceSet).toHaveValue('mix')
+  await puzzlePieceSet.selectOption('wagashi')
+  await expect(page.locator('.puzzle-hero')).toContainText('最後にあんみつの逃げ道をなくそう')
+  await expect(page.locator('.puzzle-hero-piece img')).toHaveAttribute('src', /\/wagashi\/lion\.png/)
+
+  await puzzlePieceSet.selectOption('western')
+  await expect(page.locator('.puzzle-hero')).toContainText('最後にケーキの逃げ道をなくそう')
+  await expect(page.locator('.puzzle-hero-piece img')).toHaveAttribute('src', /\/western\/lion\.png/)
+
   expect(errors).toEqual([])
 })
 
@@ -99,7 +137,7 @@ test('1手詰めの不正解後に相手の応手と理由を表示する', asyn
   await page.getByRole('button', { name: /詰将棋に挑戦/ }).click()
   await page.getByRole('button', { name: /まんなかを ふさごう/ }).click()
 
-  await page.getByRole('button', { name: '3二 クッキー', exact: true }).click()
+  await page.getByRole('button', { name: '3二 こんぺいとう', exact: true }).click()
   await page.getByRole('button', { name: '3一 空き', exact: true }).click()
 
   await expect(page.getByText('不正解', { exact: true })).toBeVisible()
@@ -127,8 +165,8 @@ for (const wrongLine of [
     tab: /3手詰め/,
     puzzle: /ぞうで 道をあける/,
     moves: [
-      ['3二 王冠クッキー', '2一 空き'],
-      ['1三 いちご大福', '2二 王冠クッキー'],
+      ['3二 花こんぺいとう', '2一 空き'],
+      ['1三 さくらもち', '2二 花こんぺいとう'],
     ],
   },
   {
@@ -136,9 +174,9 @@ for (const wrongLine of [
     tab: /5手詰め/,
     puzzle: /もちごまから 連続王手/,
     moves: [
-      ['プリン。置いたあとはたて・よこに1マス動けます。選ぶと置ける場所を表示します', '3一 空き'],
-      ['3一 プリン', '2一 空き'],
-      ['3二 クッキー', '3一 空き'],
+      ['だんご。置いたあとはたて・よこに1マス動けます。選ぶと置ける場所を表示します', '3一 空き'],
+      ['3一 だんご', '2一 空き'],
+      ['3二 こんぺいとう', '3一 空き'],
     ],
   },
 ]) {
@@ -178,12 +216,12 @@ test('3手詰めでも自分の王を取られる手はその応手で不正解�
   await page.getByRole('button', { name: /3手詰め/ }).click()
   await page.getByRole('button', { name: /ななめから まっすぐ/ }).click()
 
-  await page.getByRole('button', { name: '2四 パフェ', exact: true }).click()
+  await page.getByRole('button', { name: '2四 あんみつ', exact: true }).click()
   await page.getByRole('button', { name: '3三 空き', exact: true }).click()
 
   await expect(page.getByText('不正解', { exact: true })).toBeVisible()
   await expect(page.getByText('相手の応手', { exact: true })).toBeVisible()
-  await expect(page.locator('.puzzle-guide')).toContainText('こちらのパフェを取れます')
+  await expect(page.locator('.puzzle-guide')).toContainText('こちらのあんみつを取れます')
   expect(errors).toEqual([])
 })
 
@@ -194,13 +232,13 @@ test('詰将棋ではライオンの危険な移動先も候補に表示する',
   await page.getByRole('button', { name: /詰将棋に挑戦/ }).click()
   await page.getByRole('button', { name: /まんなかを ふさごう/ }).click()
 
-  await page.getByRole('button', { name: '3三 パフェ', exact: true }).click()
+  await page.getByRole('button', { name: '3三 あんみつ', exact: true }).click()
   const unsafeTarget = page.getByRole('button', { name: '2二 空き', exact: true })
   await expect(unsafeTarget).toHaveClass(/target/)
   await unsafeTarget.click()
 
   await expect(page.getByText('不正解：応手があります')).toBeVisible()
-  await expect(page.locator('.puzzle-guide')).toContainText('こちらのパフェを取れます')
+  await expect(page.locator('.puzzle-guide')).toContainText('こちらのあんみつを取れます')
   await expect(page.locator('.puzzle-reply-target')).toHaveCount(1)
   expect(errors).toEqual([])
 })
@@ -211,7 +249,7 @@ test('王手でない応手なしの手を詰みと表示しない', async ({ pa
   await page.goto('/okashi/')
   await page.getByRole('button', { name: /詰将棋に挑戦/ }).click()
   await page.getByRole('button', { name: /ちゅうおうへ ななめ/ }).click()
-  await page.getByRole('button', { name: '2三 パフェ', exact: true }).click()
+  await page.getByRole('button', { name: '2三 あんみつ', exact: true }).click()
   await page.getByRole('button', { name: '1三 空き', exact: true }).click()
 
   await expect(page.getByText('不正解：王手ではありません')).toBeVisible()
@@ -224,7 +262,7 @@ test('王手でない応手なしの手を詰みと表示しない', async ({ pa
 })
 
 for (const game of [
-  { path: 'okashi', title: 'おかししょうぎ', chick: 'クッキー', lion: 'パフェ' },
+  { path: 'okashi', title: 'おかししょうぎ', chick: 'こんぺいとう', lion: 'あんみつ' },
   { path: 'samurai', title: 'さむらいしょうぎ', chick: '足軽', lion: '大将' },
 ]) {
   test(`${game.title}を表示し、先手と後手が基本の一手を指せる`, async ({ page }) => {
@@ -258,7 +296,11 @@ for (const game of [
 
     // 通常モードでは、取られる場所もライオン／大将の移動候補として隠さない。
     await page.getByRole('button', { name: `2四${game.lion}`, exact: true }).click()
-    await expect(page.getByRole('button', { name: '2三空き', exact: true })).toHaveClass(/target/)
+    const unsafeLionMove = page.getByRole('button', { name: '2三空き', exact: true })
+    await expect(unsafeLionMove).toHaveClass(/target/)
+    await unsafeLionMove.click()
+    await expect(page.locator('.result')).toContainText(`${game.lion}が取られる場所に動いてしまいました`)
+    await expect(page.locator('.result > span')).toHaveText('❌')
 
     expect(errors).toEqual([])
   })

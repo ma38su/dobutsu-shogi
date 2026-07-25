@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AiWorker from './ai.worker?worker&inline'
+import PuzzleWorker from './puzzle.worker?worker&inline'
 import type {AiSearchStats} from './ai-engine'
-import {apply,clone,isInCheck,legal,other,pseudo,vec,type Kind,type Move,type Position,type Side} from './game'
-import {applyPuzzle,puzzleMateDistance,puzzleWinningMoves} from './puzzle-engine'
+import type {PuzzleWorkerRequest,PuzzleWorkerResponse} from './puzzle-worker-protocol'
+import {apply,clone,legal,other,pseudo,vec,type Kind,type Move,type Position,type Side} from './game'
+import {applyPuzzle} from './puzzle-engine'
 import {PUZZLES,PUZZLE_LEVELS,type PuzzleDefinition,type PuzzleDifficulty} from './puzzles'
 import {buildReview,immediateWinningMoves,type ReviewMoment} from './review-engine'
 import './App.css'
@@ -13,22 +15,21 @@ const F=['1','2','3'],R=['一','二','三','四']; const L:Record<PieceSet,Recor
 const VISUAL_THEMES:Record<VisualTheme,{label:string;pieceRoot:string}>={sweets:{label:'おかし',pieceRoot:'./pieces/sweets'}}
 const SAMURAI_NAMES:Record<Kind,string>={lion:'大将',giraffe:'槍武者',elephant:'弓武者',chick:'足軽',hen:'若武者'}
 const INITIAL:Position={board:[{side:'gote',kind:'giraffe'},{side:'gote',kind:'lion'},{side:'gote',kind:'elephant'},null,{side:'gote',kind:'chick'},null,null,{side:'sente',kind:'chick'},null,{side:'sente',kind:'elephant'},{side:'sente',kind:'lion'},{side:'sente',kind:'giraffe'}],hands:{sente:[],gote:[]},turn:'sente'}
-if(import.meta.env.DEV)PUZZLES.forEach(item=>{const distance=puzzleMateDistance(item.position,'sente',item.plies),shorter=item.plies>1?puzzleMateDistance(item.position,'sente',item.plies-2):null,firstMoves=puzzleWinningMoves(item.position,'sente',item.plies);if(distance!==item.plies||shorter!==null||firstMoves.length!==1)console.error(`Invalid puzzle: ${item.id}`,{distance,shorter,firstMoves})})
 const movesEqual=(a:Move,b:Move)=>a.to===b.to&&a.from===b.from&&a.hand===b.hand&&a.piece===b.piece
 const note=(m:Move,names:Record<Kind,string>)=>`${m.side==='sente'?'▲':'△'}${F[m.to%3]}${R[Math.floor(m.to/3)]} ${names[m.piece]}${m.hand?'打':''}${m.promote?'成':''}`
 function App({variant='okashi'}:{variant?:AppVariant}){
-  const[appMode,setAppMode]=useState<AppMode>('menu'),[hist,setHist]=useState<Position[]>([clone(INITIAL)]),[moves,setMoves]=useState<Move[]>([]),[cur,setCur]=useState(0),[sel,setSel]=useState<{from?:number;hand?:number}|null>(null),[players,setPlayers]=useState<Record<Side,'human'|'ai'>>({sente:'human',gote:'ai'}),[level,setLevel]=useState(2),[ruleMode,setRuleMode]=useState<RuleMode>('normal'),[visualTheme,setVisualTheme]=useState<VisualTheme>('sweets'),[pieceSet,setPieceSet]=useState<PieceSet>('mix'),[thinking,setThinking]=useState(false),[aiDebug,setAiDebug]=useState<AiDebugResult|null>(null),[review,setReview]=useState<ReviewMoment[]|null>(null),[reviewBusy,setReviewBusy]=useState(false)
+  const[appMode,setAppMode]=useState<AppMode>('menu'),[hist,setHist]=useState<Position[]>([clone(INITIAL)]),[moves,setMoves]=useState<Move[]>([]),[cur,setCur]=useState(0),[sel,setSel]=useState<{from?:number;hand?:number}|null>(null),[players,setPlayers]=useState<Record<Side,'human'|'ai'>>({sente:'human',gote:'ai'}),[level,setLevel]=useState(2),[ruleMode,setRuleMode]=useState<RuleMode>('normal'),[visualTheme,setVisualTheme]=useState<VisualTheme>('sweets'),[pieceSet,setPieceSet]=useState<PieceSet>('wagashi'),[thinking,setThinking]=useState(false),[aiDebug,setAiDebug]=useState<AiDebugResult|null>(null),[review,setReview]=useState<ReviewMoment[]|null>(null),[reviewBusy,setReviewBusy]=useState(false)
   const p=hist[cur],isSamurai=variant==='samurai',names=isSamurai?SAMURAI_NAMES:L[pieceSet],pieceRoot=isSamurai?'../pieces/samurai':'../pieces/sweets',lm=useMemo(()=>legal(p),[p]),pm=useMemo(()=>pseudo(p),[p])
   const isSelected=(m:Move)=>!!sel&&(sel.from!==undefined?m.from===sel.from:m.hand===p.hands[p.turn][sel.hand!])
   const sameMove=(a:Move,b:Move)=>a.to===b.to&&a.from===b.from&&a.hand===b.hand
   const commit=useCallback((m:Move,foul=false)=>{
     const next=apply(p,m,!foul)
-    if(foul){next.winner=other(m.side);next.reason='反則負け：合法手ではない手を指しました'}
+    if(foul){next.winner=other(m.side);next.reason=`${names.lion}が取られる場所に動いてしまいました`}
     setHist([...hist.slice(0,cur+1),next])
     setMoves([...moves.slice(0,cur),m])
     setCur(cur+1)
     setSel(null)
-  },[cur,hist,moves,p])
+  },[cur,hist,moves,names,p])
   useEffect(()=>{
     if(appMode!=='battle'||p.winner||players[p.turn]!=='ai'){setThinking(false);return}
     setThinking(true)
@@ -54,8 +55,21 @@ if(appMode==='menu')return <ModeMenu variant={variant} pieceSet={pieceSet} piece
 if(appMode==='puzzle')return <PuzzleMode variant={variant} names={names} pieceSet={pieceSet} setPieceSet={setPieceSet} pieceRoot={pieceRoot} onExit={()=>setAppMode('menu')}/>
 if(review)return <ReviewScreen moments={review} variant={variant} names={names} pieceSet={pieceSet} pieceRoot={pieceRoot} onClose={()=>setReview(null)} onReset={reset}/>
 return <main className={`app-shell ${isSamurai?'samurai':`sweets-${pieceSet}`}`}><header><div className="brand"><span>{isSamurai?'さ':'お'}</span><div><h1>{isSamurai?'さむらいしょうぎ':'おかししょうぎ'}</h1><p>対局モード</p></div></div><div className="header-actions"><button className="new" onClick={()=>setAppMode('menu')}>モード選択</button><button className="new" onClick={reset}>新しい対局</button></div></header><section className="game-card">
-{(['gote']as Side[]).map(s=><Player key={s} side={s} p={p} thinking={thinking} players={players} setPlayers={setPlayers}/>)}<Hand side="gote" p={p} sel={sel} setSel={setSel} players={players} pieceSet={pieceSet} names={names} pieceRoot={pieceRoot}/><div className="board">{p.board.map((x,i)=><button key={i} onClick={()=>tap(i)} className={`square ${(Math.floor(i/3)+i%3)%2?'shade':''} ${sel?.from===i?'chosen':''} ${targets.has(i)?'target':''} ${ruleMode==='beginner'&&illegalTargets.has(i)?'illegal-target':''}`} aria-label={`${F[i%3]}${R[Math.floor(i/3)]}${x?names[x.kind]:'空き'}${ruleMode==='beginner'&&illegalTargets.has(i)?'、合法手ではありません':''}`}>{x&&<><MovementGuides kind={x.kind} side={x.side}/><div className={`piece ${x.side}`}><PieceIcon kind={x.kind} pieceSet={pieceSet} pieceRoot={pieceRoot}/></div></>}</button>)}</div><Hand side="sente" p={p} sel={sel} setSel={setSel} players={players} pieceSet={pieceSet} names={names} pieceRoot={pieceRoot}/>{(['sente']as Side[]).map(s=><Player key={s} side={s} p={p} thinking={thinking} players={players} setPlayers={setPlayers}/>)}{p.winner&&<div className="result"><span>{p.reason?.startsWith('反則負け')?'❌':'🎉'}</span><div><b>{p.winner==='sente'?'せんて':'ごて'}の勝ち！</b><small>{p.reason}</small></div><div className="result-actions"><button className="review-start" onClick={openReview} disabled={reviewBusy}>{reviewBusy?'考え中…':'いっしょにおさらい'}</button><button onClick={reset}>もう一局</button></div></div>}</section>
-<section className="controls"><div className="timeline"><button onClick={()=>setCur(0)} disabled={!cur}>|◀</button><button onClick={()=>setCur(cur-1)} disabled={!cur}>◀ 待った</button><div><b>{cur}</b> / {moves.length} 手</div><button onClick={()=>setCur(cur+1)} disabled={cur>=hist.length-1}>進む ▶</button><button onClick={()=>setCur(hist.length-1)} disabled={cur>=hist.length-1}>▶|</button></div><div className="setting"><div><b>対局モード</b><span>{ruleMode==='normal'?'不正手は反則負けになります':'不正な移動先を❌で案内します'}</span></div><select value={ruleMode} onChange={e=>{setRuleMode(e.target.value as RuleMode);setSel(null)}}><option value="normal">通常</option><option value="beginner">入門</option></select></div><div className="setting"><div><b>AIのつよさ</b><span>端末の中だけで考えます</span></div><select value={level} onChange={e=>setLevel(+e.target.value)}><option value="1">やさしい</option><option value="2">ふつう</option><option value="3">つよい</option><option value="4">とてもつよい</option></select></div>{import.meta.env.DEV&&<AiDebug result={aiDebug} names={names}/>} {!isSamurai&&<><div className="setting"><div><b>見た目のテーマ</b><span>新しいテーマを追加できます</span></div><select value={visualTheme} onChange={e=>setVisualTheme(e.target.value as VisualTheme)}>{Object.entries(VISUAL_THEMES).map(([id,v])=><option key={id} value={id}>{v.label}</option>)}</select></div><div className="setting"><div><b>おかしの種類</b><span>対局中も変更できます</span></div><select value={pieceSet} onChange={e=>setPieceSet(e.target.value as PieceSet)}><option value="wagashi">和菓子</option><option value="western">洋菓子</option><option value="mix">和洋MIX</option></select></div></>}{isSamurai?<div className="battlefield-setting"><div><b>舞台</b><span>草原と土の戦場</span></div><strong>戦場</strong></div>:<div className="board-setting"><div><b>盤のデザイン</b><span>対局中も変更できます</span></div><BoardStylePicker/></div>}<details><summary>棋譜を見る <span>{moves.length}手</span></summary><ol>{moves.map((m,i)=><li className={cur===i+1?'current':''} key={i}><button onClick={()=>setCur(i+1)}>{note(m,names)}</button></li>)}</ol></details></section><footer>対局はこの端末だけで進みます · オフラインでも遊べます</footer></main>}
+{(['gote']as Side[]).map(s=><Player key={s} side={s} p={p} thinking={thinking} players={players} setPlayers={setPlayers}/>)}<Hand side="gote" p={p} sel={sel} setSel={setSel} players={players} pieceSet={pieceSet} names={names} pieceRoot={pieceRoot}/><BattleBoard position={p} selection={sel} targets={targets} illegalTargets={illegalTargets} ruleMode={ruleMode} names={names} pieceSet={pieceSet} pieceRoot={pieceRoot} onTap={tap}/><Hand side="sente" p={p} sel={sel} setSel={setSel} players={players} pieceSet={pieceSet} names={names} pieceRoot={pieceRoot}/>{(['sente']as Side[]).map(s=><Player key={s} side={s} p={p} thinking={thinking} players={players} setPlayers={setPlayers}/>)}{p.winner&&<div className="result"><span>{p.reason?.includes('が取られる場所に動いてしまいました')?'❌':'🎉'}</span><div><b>{p.winner==='sente'?'せんて':'ごて'}の勝ち！</b><small>{p.reason}</small></div><div className="result-actions"><button className="review-start" onClick={openReview} disabled={reviewBusy}>{reviewBusy?'考え中…':'いっしょにおさらい'}</button><button onClick={reset}>もう一局</button></div></div>}</section>
+<section className="controls"><BattleTimeline current={cur} moveCount={moves.length} historyLength={hist.length} onSelect={setCur}/><div className="setting"><div><b>対局モード</b><span>{ruleMode==='normal'?`${names.lion}が取られる手を指すと負けです`:`${names.lion}が取られる手を❌で案内します`}</span></div><select value={ruleMode} onChange={e=>{setRuleMode(e.target.value as RuleMode);setSel(null)}}><option value="normal">通常</option><option value="beginner">入門</option></select></div><div className="setting"><div><b>AIのつよさ</b><span>端末の中だけで考えます</span></div><select value={level} onChange={e=>setLevel(+e.target.value)}><option value="1">やさしい</option><option value="2">ふつう</option><option value="3">つよい</option><option value="4">とてもつよい</option></select></div>{import.meta.env.DEV&&<AiDebug result={aiDebug} names={names}/>} {!isSamurai&&<><div className="setting"><div><b>見た目のテーマ</b><span>新しいテーマを追加できます</span></div><select value={visualTheme} onChange={e=>setVisualTheme(e.target.value as VisualTheme)}>{Object.entries(VISUAL_THEMES).map(([id,v])=><option key={id} value={id}>{v.label}</option>)}</select></div><div className="setting"><div><b>おかしの種類</b><span>対局中も変更できます</span></div><select value={pieceSet} onChange={e=>setPieceSet(e.target.value as PieceSet)}><option value="wagashi">和菓子</option><option value="western">洋菓子</option><option value="mix">和洋MIX</option></select></div></>}{isSamurai?<div className="battlefield-setting"><div><b>舞台</b><span>草原と土の戦場</span></div><strong>戦場</strong></div>:<div className="board-setting"><div><b>盤のデザイン</b><span>対局中も変更できます</span></div><BoardStylePicker/></div>}<BattleMoveHistory moves={moves} current={cur} names={names} onSelect={setCur}/></section><footer>対局はこの端末だけで進みます · オフラインでも遊べます</footer></main>}
+
+function BattleBoard({position,selection,targets,illegalTargets,ruleMode,names,pieceSet,pieceRoot,onTap}:{position:Position;selection:{from?:number;hand?:number}|null;targets:Set<number>;illegalTargets:Set<number>;ruleMode:RuleMode;names:Record<Kind,string>;pieceSet:PieceSet;pieceRoot:string;onTap:(index:number)=>void}){
+  return <div className="board">{position.board.map((piece,index)=><button key={index} onClick={()=>onTap(index)} className={`square ${(Math.floor(index/3)+index%3)%2?'shade':''} ${selection?.from===index?'chosen':''} ${targets.has(index)?'target':''} ${ruleMode==='beginner'&&illegalTargets.has(index)?'illegal-target':''}`} aria-label={`${F[index%3]}${R[Math.floor(index/3)]}${piece?names[piece.kind]:'空き'}${ruleMode==='beginner'&&illegalTargets.has(index)?`、この手では${names.lion}が取られます`:''}`}>{piece&&<><MovementGuides kind={piece.kind} side={piece.side}/><div className={`piece ${piece.side}`}><PieceIcon kind={piece.kind} pieceSet={pieceSet} pieceRoot={pieceRoot}/></div></>}</button>)}</div>
+}
+
+const BattleTimeline=memo(function BattleTimeline({current,moveCount,historyLength,onSelect}:{current:number;moveCount:number;historyLength:number;onSelect:(index:number)=>void}){
+  return <div className="timeline"><button onClick={()=>onSelect(0)} disabled={!current}>|◀</button><button onClick={()=>onSelect(current-1)} disabled={!current}>◀ 待った</button><div><b>{current}</b> / {moveCount} 手</div><button onClick={()=>onSelect(current+1)} disabled={current>=historyLength-1}>進む ▶</button><button onClick={()=>onSelect(historyLength-1)} disabled={current>=historyLength-1}>▶|</button></div>
+})
+
+const BattleMoveHistory=memo(function BattleMoveHistory({moves,current,names,onSelect}:{moves:Move[];current:number;names:Record<Kind,string>;onSelect:(index:number)=>void}){
+  return <details><summary>棋譜を見る <span>{moves.length}手</span></summary><ol>{moves.map((move,index)=><li className={current===index+1?'current':''} key={index}><button onClick={()=>onSelect(index+1)}>{note(move,names)}</button></li>)}</ol></details>
+})
+
 function AiDebug({result,names}:{result:AiDebugResult|null;names:Record<Kind,string>}){
   if(!result)return <aside className="ai-debug"><b>AI探索情報（開発用）</b><span>AIが指すと計測結果を表示します</span></aside>
   const{stats,move}=result,hitRate=stats.nodes?stats.tableHits/stats.nodes*100:0
@@ -100,61 +114,78 @@ function PuzzleMode({variant,names,pieceSet,setPieceSet,pieceRoot,onExit}:{varia
 function PuzzlePlay({puzzle,variant,names,pieceSet,pieceRoot,onBack,onNext,onComplete}:{puzzle:PuzzleDefinition;variant:AppVariant;names:Record<Kind,string>;pieceSet:PieceSet;pieceRoot:string;onBack:()=>void;onNext?:()=>void;onComplete:()=>void}){
   const attacker:Side='sente'
   type WrongPreview={move:Move;reply?:Move;message?:string;done:boolean}
-  const[current,setCurrent]=useState(()=>clone(puzzle.position)),[remaining,setRemaining]=useState<number>(puzzle.plies),[selected,setSelected]=useState<{from?:number;hand?:Kind}|null>(null),[feedback,setFeedback]=useState<'wrong'|'good'|'your-turn'|'continuing'|null>(null),[hintStage,setHintStage]=useState(0),[thinking,setThinking]=useState(false),[solved,setSolved]=useState(false),[attempts,setAttempts]=useState(0),[wrongPreview,setWrongPreview]=useState<WrongPreview|null>(null),[lastAttackMove,setLastAttackMove]=useState<Move|null>(null)
+  const[current,setCurrent]=useState(()=>clone(puzzle.position)),[remaining,setRemaining]=useState<number>(puzzle.plies),[selected,setSelected]=useState<{from?:number;hand?:Kind}|null>(null),[feedback,setFeedback]=useState<'wrong'|'good'|'your-turn'|'continuing'|null>(null),[hintStage,setHintStage]=useState(0),[thinking,setThinking]=useState(true),[solved,setSolved]=useState(false),[attempts,setAttempts]=useState(0),[wrongPreview,setWrongPreview]=useState<WrongPreview|null>(null),[lastAttackMove,setLastAttackMove]=useState<Move|null>(null),[winningMoves,setWinningMoves]=useState<Move[]>([])
+  const puzzleWorkerRef=useRef<Worker|null>(null),puzzleRequestId=useRef(0)
   const userMoves=useMemo(()=>pseudo(current),[current]),sourceMatches=(m:Move)=>!!selected&&(selected.from!==undefined?m.from===selected.from:m.hand===selected.hand),targets=new Set(selected?userMoves.filter(sourceMatches).map(m=>m.to):[])
-  const winningMoves=current.turn===attacker&&!solved&&!wrongPreview?puzzleWinningMoves(current,attacker,remaining):[],hintMove=winningMoves[0]
+  const hintMove=winningMoves[0]
   useEffect(()=>{
-    if(solved||current.winner||current.turn===attacker||wrongPreview?.done){setThinking(false);return}
-    if(wrongPreview){
-      setThinking(true)
-      const timer=window.setTimeout(()=>{
-        const replies=legal(current),checked=isInCheck(current,current.turn)
-        const attackerLion=current.board.findIndex(piece=>piece?.side===attacker&&piece.kind==='lion')
-        const lionCapture=attackerLion>=0?pseudo(current).find(move=>move.to===attackerLion&&move.captured==='lion'):undefined
-        const lionReplies=replies.filter(move=>move.piece==='lion')
-        const checkerCaptures=replies.filter(move=>move.to===wrongPreview.move.to&&move.captured)
-        const choice=lionCapture??(checked?checkerCaptures[0]??lionReplies[0]:lionReplies[0])??replies[0]
+    const worker=new PuzzleWorker()
+    puzzleWorkerRef.current=worker
+    return()=>{puzzleRequestId.current+=1;puzzleWorkerRef.current=null;worker.terminate()}
+  },[])
+  useEffect(()=>{
+    const worker=puzzleWorkerRef.current
+    if(!worker)return
+    const id=++puzzleRequestId.current
+    if(solved||current.winner||wrongPreview?.done){setThinking(false);return}
+    setThinking(true)
+    setWinningMoves([])
+    const request:PuzzleWorkerRequest=current.turn===attacker
+      ?{id,type:'analyze',position:current,attacker,remaining}
+      :{id,type:'reply',position:current,attacker,remaining,wrongMove:wrongPreview?.move,minimumDelayMs:wrongPreview?620:520}
+    const onMessage=(event:MessageEvent<PuzzleWorkerResponse>)=>{
+      const response=event.data
+      if(response.id!==id||puzzleRequestId.current!==id)return
+      if(response.type==='analyze'){
+        setWinningMoves(response.winningMoves)
+        setThinking(false)
+        return
+      }
+      const choice=response.choice
+      if(wrongPreview){
         if(!choice){
           setWrongPreview(preview=>preview?{...preview,done:true,message:`その手は${names.lion}への王手になっていません。相手に合法手はありませんが、王手ではないため詰みではありません。`}:preview)
           setThinking(false)
           return
         }
-        const message=puzzleReplyMessage(choice,checked,wrongPreview.move,names)
+        const message=puzzleReplyMessage(choice,response.checked,wrongPreview.move,names)
         setCurrent(applyPuzzle(current,choice))
         setWrongPreview(preview=>preview?{...preview,reply:choice,message,done:true}:preview)
         setFeedback('wrong');setThinking(false)
-      },620)
-      return()=>window.clearTimeout(timer)
-    }
-    setThinking(true)
-    const timer=window.setTimeout(()=>{
-      const choices=legal(current).map(move=>({move,distance:puzzleMateDistance(applyPuzzle(current,move),attacker,remaining-1)})).sort((a,b)=>(b.distance??999)-(a.distance??999))
-      const choice=choices[0]?.move
+        return
+      }
       if(choice){
         const next=applyPuzzle(current,choice)
         if(lastAttackMove&&(choice.captured==='lion'||remaining<=0)){
           setCurrent(next)
-          setWrongPreview({move:lastAttackMove,reply:choice,message:puzzleReplyMessage(choice,isInCheck(current,current.turn),lastAttackMove,names),done:true})
-          setFeedback('wrong')
+          setWrongPreview({move:lastAttackMove,reply:choice,message:puzzleReplyMessage(choice,response.checked,lastAttackMove,names),done:true})
+          setFeedback('wrong');setThinking(false)
         }else{
           setCurrent(next);setRemaining(value=>value-1);setFeedback('your-turn');setHintStage(0);setSelected(null);setLastAttackMove(null)
         }
       }else if(lastAttackMove){
         setWrongPreview({move:lastAttackMove,done:true,message:`最後まで指しましたが、その手では${names.lion}への王手にならず、詰みませんでした。`})
-        setFeedback('wrong')
+        setFeedback('wrong');setThinking(false)
       }
+    }
+    const onError=()=>{
+      if(puzzleRequestId.current!==id)return
+      console.error('Puzzle worker failed')
       setThinking(false)
-    },520)
-    return()=>window.clearTimeout(timer)
+    }
+    worker.addEventListener('message',onMessage)
+    worker.addEventListener('error',onError)
+    worker.postMessage(request)
+    return()=>{puzzleRequestId.current+=1;worker.removeEventListener('message',onMessage);worker.removeEventListener('error',onError)}
   },[current,remaining,solved,wrongPreview,names,lastAttackMove])
-  const resetPuzzle=()=>{setCurrent(clone(puzzle.position));setRemaining(puzzle.plies);setSelected(null);setFeedback(null);setHintStage(0);setThinking(false);setSolved(false);setAttempts(0);setWrongPreview(null);setLastAttackMove(null)}
+  const resetPuzzle=()=>{setCurrent(clone(puzzle.position));setRemaining(puzzle.plies);setSelected(null);setFeedback(null);setHintStage(0);setThinking(true);setSolved(false);setAttempts(0);setWrongPreview(null);setLastAttackMove(null);setWinningMoves([])}
   const chooseSquare=(to:number)=>{
     if(thinking||solved||wrongPreview||current.turn!==attacker)return
     if(selected){
       const choice=userMoves.find(move=>move.to===to&&sourceMatches(move))
       if(choice){
         if(!winningMoves.some(move=>movesEqual(move,choice))){
-          setAttempts(value=>value+1);setSelected(null);setHintStage(0)
+          setAttempts(value=>value+1);setSelected(null);setHintStage(0);setThinking(true);setWinningMoves([])
           setCurrent(apply(current,choice,false))
           if(puzzle.plies===1){
             setFeedback('wrong');setWrongPreview({move:choice,done:false});setThinking(true)
@@ -164,7 +195,7 @@ function PuzzlePlay({puzzle,variant,names,pieceSet,pieceRoot,onBack,onNext,onCom
           return
         }
         const next=applyPuzzle(current,choice)
-        setCurrent(next);setRemaining(value=>value-1);setSelected(null);setFeedback('good');setHintStage(0);setLastAttackMove(null)
+        setCurrent(next);setRemaining(value=>value-1);setSelected(null);setFeedback('good');setHintStage(0);setLastAttackMove(null);setThinking(!next.winner);setWinningMoves([])
         if(next.winner===attacker){setSolved(true);onComplete()}
         return
       }
@@ -183,7 +214,7 @@ function PuzzlePlay({puzzle,variant,names,pieceSet,pieceRoot,onBack,onNext,onCom
     <header className="puzzle-play-header"><button onClick={onBack}>← 問題一覧</button><div><b>{PUZZLE_LEVELS[puzzle.difficulty].short}</b><span>{puzzle.title}</span></div><button onClick={resetPuzzle}>やり直す</button></header>
     <div className="puzzle-play-layout">
       <section className="puzzle-game">
-        <div className="puzzle-status"><span className={`difficulty-pill ${puzzle.difficulty}`}>{PUZZLE_LEVELS[puzzle.difficulty].label}</span><b>{solved?'詰み！':wrongPreview?.done?(wrongPreview.reply?'不正解：応手があります':'不正解：王手ではありません'):wrongPreview?'相手が応手しています…':thinking?'相手が考えています…':`${remaining}手以内に詰ませよう`}</b></div>
+        <div className="puzzle-status"><span className={`difficulty-pill ${puzzle.difficulty}`}>{PUZZLE_LEVELS[puzzle.difficulty].label}</span><b>{solved?'詰み！':wrongPreview?.done?(wrongPreview.reply?'不正解：応手があります':'不正解：王手ではありません'):wrongPreview?'相手が応手しています…':thinking?(current.turn===attacker?'局面を確認しています…':'相手が考えています…'):`${remaining}手以内に詰ませよう`}</b></div>
         <PuzzleHand side="gote" position={current} selected={selected} setSelected={setSelected} disabled pieceSet={pieceSet} pieceRoot={pieceRoot} names={names}/>
         <div className="board puzzle-board">{current.board.map((piece,i)=><button key={i} onClick={()=>chooseSquare(i)} className={`square ${(Math.floor(i/3)+i%3)%2?'shade':''} ${selected?.from===i?'chosen':''} ${targets.has(i)?'target':''} ${hintStage>=1&&hintMove?.from===i?'puzzle-hint-source':''} ${hintStage>=2&&hintMove?.to===i?'puzzle-hint-target':''} ${wrongPreview?.move.to===i?'puzzle-wrong-move':''} ${wrongPreview?.reply?.from===i?'puzzle-reply-source':''} ${wrongPreview?.reply?.to===i?'puzzle-reply-target':''}`} aria-label={`${squareName(i)} ${piece?names[piece.kind]:'空き'}`}>{piece&&<><MovementGuides kind={piece.kind} side={piece.side}/><div className={`piece ${piece.side}`}><PieceIcon kind={piece.kind} pieceSet={pieceSet} pieceRoot={pieceRoot}/></div></>}</button>)}</div>
         <PuzzleHand side="sente" position={current} selected={selected} setSelected={value=>{if(!thinking&&!solved&&!wrongPreview&&current.turn===attacker){setSelected(value);setFeedback(null)}}} disabled={thinking||solved||!!wrongPreview||current.turn!==attacker} pieceSet={pieceSet} pieceRoot={pieceRoot} names={names} hintKind={hintStage>=1?hintMove?.hand:undefined}/>
