@@ -1,12 +1,7 @@
-import {copyFile,readdir,readFile,writeFile} from 'node:fs/promises'
-import {basename,resolve} from 'node:path'
+import {readFile,writeFile} from 'node:fs/promises'
+import {resolve} from 'node:path'
 
 const dist=resolve('dist')
-const assetsDir=resolve(dist,'assets')
-const assetFiles=await readdir(assetsDir)
-const workerName=assetFiles.find(name=>name.startsWith('ai.worker-')&&name.endsWith('.js'))
-
-if(!workerName)throw new Error('AI worker asset was not generated')
 
 for(const app of ['okashi','samurai']){
   const appDir=resolve(dist,app)
@@ -24,9 +19,8 @@ for(const app of ['okashi','samurai']){
     readFile(stylePath,'utf8'),
   ])
 
-  await copyFile(resolve(assetsDir,workerName),resolve(appDir,workerName))
   html=html
     .replace(styleMatch[0],()=>`<style>${style}</style>`)
-    .replace(scriptMatch[0],()=>`<link rel="modulepreload" href="./${basename(workerName)}">\n    <script type="module">${script}</script>`)
+    .replace(scriptMatch[0],()=>`<script type="module">${script}</script>`)
   await writeFile(htmlPath,html)
 }

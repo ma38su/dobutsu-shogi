@@ -22,10 +22,19 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --include=optional
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install headless Chromium
+        run: npm exec -- playwright install --with-deps chromium
 
       - name: Run health checks
         run: npm run check
+
+      - name: Upload Playwright diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-diagnostics-${{ github.run_attempt }}
+          path: test-results
+          if-no-files-found: ignore
+          retention-days: 7

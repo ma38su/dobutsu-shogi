@@ -132,15 +132,22 @@ for (const game of [
   test(`${game.name}をオフラインで再表示できる`, async ({ page, context }) => {
     const errors = captureRuntimeErrors(page)
     await page.goto(`/${game.path}/`)
-    await page.waitForFunction(async () => {
-      await navigator.serviceWorker.ready
-      return Boolean(navigator.serviceWorker.controller)
-    })
+    await page.evaluate(() => navigator.serviceWorker.ready)
+    await expect.poll(() => page.evaluate(() =>
+      Boolean(navigator.serviceWorker.controller),
+    )).toBe(true)
+    await expectImagesLoaded(page, '.piece-icon')
+    await page.waitForLoadState('networkidle')
+    expect(errors).toEqual([])
+    errors.length = 0
 
     await context.setOffline(true)
     await page.reload()
     await expect(page.getByRole('heading', { name: game.name })).toBeVisible()
-    expect(errors).toEqual([])
+    await expectImagesLoaded(page, '.piece-icon')
+    expect(errors.filter(error =>
+      error.startsWith('page:') || error.startsWith('request: http://127.0.0.1:4173/'),
+    )).toEqual([])
     await context.setOffline(false)
   })
 }

@@ -3,13 +3,18 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=11 <12"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/inline-pwa-assets.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "test:puzzles": "node --experimental-strip-types scripts/validate-puzzles.mjs",
-    "test": "npm run build && npm run test:puzzles && playwright test",
+    "test:e2e": "playwright test",
+    "test": "npm run build && npm run test:puzzles && npm run test:e2e",
     "check": "npm run lint && npm test"
   },
   "dependencies": {

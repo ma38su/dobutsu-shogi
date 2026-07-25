@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import AiWorker from './ai.worker?worker&inline'
 import type {AiSearchStats} from './ai-engine'
 import {apply,attacked,clone,legal,other,pseudo,vec,type Kind,type Move,type Position,type Side} from './game'
 import {applyPuzzle,puzzleMateDistance,puzzleWinningMoves} from './puzzle-engine'
@@ -31,7 +32,7 @@ function App({variant='okashi'}:{variant?:AppVariant}){
   useEffect(()=>{
     if(appMode!=='battle'||p.winner||players[p.turn]!=='ai'){setThinking(false);return}
     setThinking(true)
-    const worker=new Worker(new URL('./ai.worker.ts',import.meta.url),{type:'module'}),requestId=Math.random()
+    const worker=new AiWorker(),requestId=Math.random()
     const timer=window.setTimeout(()=>worker.postMessage({id:requestId,position:p,level}),350)
     worker.onmessage=(event:MessageEvent<{id:number;move?:Move;stats:AiSearchStats}>)=>{
       if(event.data.id!==requestId)return
