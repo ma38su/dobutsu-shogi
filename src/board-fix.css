@@ -1652,6 +1652,11 @@
   background: #d96b42;
 }
 
+.puzzle-guide-actions .next-puzzle {
+  grid-column: 1 / -1;
+  font-size: 14px;
+}
+
 .puzzle-guide.solved {
   align-items: center;
   justify-content: center;

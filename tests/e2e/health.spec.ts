@@ -33,6 +33,41 @@ test('ランチャーから両方のゲームを開ける', async ({ page }) => 
   expect(errors).toEqual([])
 })
 
+test('AIが先手の着手に応手する', async ({ page }) => {
+  const errors = captureRuntimeErrors(page)
+
+  await page.goto('/okashi/')
+  await page.getByRole('button', { name: /対局する/ }).click()
+
+  await page.getByRole('button', { name: '2三クッキー', exact: true }).click()
+  await page.getByRole('button', { name: '2二クッキー', exact: true }).click()
+
+  await expect(page.locator('.timeline')).toContainText('2 / 2 手', { timeout: 10_000 })
+  await expect(page.getByText('● 手番です')).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+test('最初の1手詰めをクリアできる', async ({ page }) => {
+  const errors = captureRuntimeErrors(page)
+
+  await page.goto('/okashi/')
+  await page.getByRole('button', { name: /詰将棋に挑戦/ }).click()
+  await page.getByRole('button', { name: /まんなかを ふさごう/ }).click()
+
+  await expect(page.getByText('1手以内に詰ませよう')).toBeVisible()
+  await page.getByRole('button', { name: '動かす駒のヒント' }).click()
+  await page.getByRole('button', { name: '行き先も見る' }).click()
+  await page.locator('button.puzzle-hint-source').click()
+  await page.locator('button.puzzle-hint-target').click()
+
+  await expect(page.getByText('詰み！')).toBeVisible()
+  await expect(page.getByText('クリア！')).toBeVisible()
+  await page.getByRole('button', { name: 'つぎの問題へ →' }).click()
+  await expect(page.locator('.puzzle-play-header')).toContainText('みぎから おさえよう')
+  await expect(page.getByText('1手以内に詰ませよう')).toBeVisible()
+  expect(errors).toEqual([])
+})
+
 for (const game of [
   { path: 'okashi', title: 'おかししょうぎ', chick: 'クッキー', lion: 'パフェ' },
   { path: 'samurai', title: 'さむらいしょうぎ', chick: '足軽', lion: '大将' },
