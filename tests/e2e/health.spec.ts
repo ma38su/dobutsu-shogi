@@ -8,7 +8,9 @@ function captureRuntimeErrors(page: Page) {
   })
   page.on('pageerror', error => errors.push(`page: ${error.message}`))
   page.on('requestfailed', request => {
-    errors.push(`request: ${request.url()} (${request.failure()?.errorText ?? 'failed'})`)
+    const failure=request.failure()?.errorText??'failed'
+    if(failure==='net::ERR_ABORTED')return
+    errors.push(`request: ${request.url()} (${failure})`)
   })
 
   return errors
@@ -58,6 +60,8 @@ test('AIが先手の着手に応手する', async ({ page }) => {
 
   await page.goto('/okashi/')
   await page.getByRole('button', { name: /対局する/ }).click()
+  await expect(page.locator('.turn-badge')).toContainText('先手の番')
+  await expect(page.locator('.turn-badge')).toContainText('駒を選んでください')
 
   await page.getByRole('button', { name: '2三こんぺいとう', exact: true }).click()
   await page.getByRole('button', { name: '2二こんぺいとう', exact: true }).click()
@@ -283,11 +287,13 @@ for (const game of [
     await expect(page.getByRole('button', { name: `2二${game.chick}`, exact: true })).toHaveClass(/target/)
     await page.getByRole('button', { name: `2二${game.chick}`, exact: true }).click()
     await expect(page.locator('.timeline')).toContainText('1 / 1 手')
+    await expect(page.locator('.turn-badge')).toContainText('後手の番')
 
     await page.getByRole('button', { name: `2一${game.lion}`, exact: true }).click()
     await expect(page.getByRole('button', { name: `2二${game.chick}`, exact: true })).toHaveClass(/target/)
     await page.getByRole('button', { name: `2二${game.chick}`, exact: true }).click()
     await expect(page.locator('.timeline')).toContainText('2 / 2 手')
+    await expect(page.locator('.turn-badge')).toContainText('先手の番')
     await expect(page.getByRole('button', { name: `2二${game.lion}`, exact: true })).toBeVisible()
     const capturedChick = page.locator('.hand.gote button')
     await expect(capturedChick).toHaveAttribute('aria-label', new RegExp(`${game.chick}。置いたあとは前に1マス動けます`))

@@ -5,6 +5,8 @@ export type Move={from?:number;hand?:Kind;to:number;piece:Kind;side:Side;capture
 export type Position={board:(Piece|null)[];hands:Record<Side,Kind[]>;turn:Side;winner?:Side;reason?:string}
 
 export const V:Record<Kind,number>={lion:1000,giraffe:5,elephant:5,chick:2,hen:7}
+const KINDS:Kind[]=['lion','giraffe','elephant','chick','hen']
+const KIND_CODE:Record<Kind,string>={lion:'l',giraffe:'g',elephant:'e',chick:'c',hen:'h'}
 
 export const other=(side:Side):Side=>side==='sente'?'gote':'sente'
 export const finalRank=(side:Side)=>side==='sente'?0:3
@@ -22,7 +24,13 @@ export function clone(position:Position):Position{
 }
 
 export function positionKey(position:Position):string{
-  return JSON.stringify([position.board,[...position.hands.sente].sort(),[...position.hands.gote].sort(),position.turn])
+  const board=position.board.map(piece=>piece?`${piece.side==='sente'?'s':'g'}${KIND_CODE[piece.kind]}`:'__').join('')
+  const handKey=(side:Side)=>{
+    const counts:Record<Kind,number>={lion:0,giraffe:0,elephant:0,chick:0,hen:0}
+    position.hands[side].forEach(kind=>{counts[kind]+=1})
+    return KINDS.map(kind=>counts[kind]).join(',')
+  }
+  return`${position.turn==='sente'?'s':'g'}|${board}|${handKey('sente')}|${handKey('gote')}`
 }
 
 export function vec(kind:Kind,side:Side):number[][]{

@@ -10,7 +10,7 @@ import {buildReview,immediateWinningMoves,type ReviewMoment} from './review-engi
 import './App.css'
 import './board-fix.css'
 type RuleMode='normal'|'beginner'; type PieceSet='wagashi'|'western'|'mix'; type VisualTheme='sweets'; type AppMode='menu'|'battle'|'puzzle'; export type AppVariant='okashi'|'samurai'
-type AiDebugResult={move?:Move;stats:AiSearchStats}
+type AiDebugResult={move?:Move;stats:AiSearchStats;elapsedMs:number}
 const F=['1','2','3'],R=['一','二','三','四']; const L:Record<PieceSet,Record<Kind,string>>={wagashi:{lion:'あんみつ',giraffe:'だんご',elephant:'さくらもち',chick:'こんぺいとう',hen:'花こんぺいとう'},western:{lion:'ケーキ',giraffe:'エクレア',elephant:'カップケーキ',chick:'マカロン',hen:'キャンディ'},mix:{lion:'パフェ',giraffe:'プリン',elephant:'いちご大福',chick:'クッキー',hen:'王冠クッキー'}}
 const VISUAL_THEMES:Record<VisualTheme,{label:string;pieceRoot:string}>={sweets:{label:'おかし',pieceRoot:'./pieces/sweets'}}
 const SAMURAI_NAMES:Record<Kind,string>={lion:'大将',giraffe:'槍武者',elephant:'弓武者',chick:'足軽',hen:'若武者'}
@@ -19,6 +19,7 @@ const movesEqual=(a:Move,b:Move)=>a.to===b.to&&a.from===b.from&&a.hand===b.hand&
 const note=(m:Move,names:Record<Kind,string>)=>`${m.side==='sente'?'▲':'△'}${F[m.to%3]}${R[Math.floor(m.to/3)]} ${names[m.piece]}${m.hand?'打':''}${m.promote?'成':''}`
 function App({variant='okashi'}:{variant?:AppVariant}){
   const[appMode,setAppMode]=useState<AppMode>('menu'),[hist,setHist]=useState<Position[]>([clone(INITIAL)]),[moves,setMoves]=useState<Move[]>([]),[cur,setCur]=useState(0),[sel,setSel]=useState<{from?:number;hand?:number}|null>(null),[players,setPlayers]=useState<Record<Side,'human'|'ai'>>({sente:'human',gote:'ai'}),[level,setLevel]=useState(2),[ruleMode,setRuleMode]=useState<RuleMode>('normal'),[visualTheme,setVisualTheme]=useState<VisualTheme>('sweets'),[pieceSet,setPieceSet]=useState<PieceSet>('wagashi'),[thinking,setThinking]=useState(false),[aiDebug,setAiDebug]=useState<AiDebugResult|null>(null),[review,setReview]=useState<ReviewMoment[]|null>(null),[reviewBusy,setReviewBusy]=useState(false)
+  const aiWorkerRef=useRef<Worker|null>(null),aiRequestId=useRef(0)
   const p=hist[cur],isSamurai=variant==='samurai',names=isSamurai?SAMURAI_NAMES:L[pieceSet],pieceRoot=isSamurai?'../pieces/samurai':'../pieces/sweets',lm=useMemo(()=>legal(p),[p]),pm=useMemo(()=>pseudo(p),[p])
   const isSelected=(m:Move)=>!!sel&&(sel.from!==undefined?m.from===sel.from:m.hand===p.hands[p.turn][sel.hand!])
   const sameMove=(a:Move,b:Move)=>a.to===b.to&&a.from===b.from&&a.hand===b.hand
@@ -30,22 +31,38 @@ function App({variant='okashi'}:{variant?:AppVariant}){
     setCur(cur+1)
     setSel(null)
   },[cur,hist,moves,names,p])
+  useEffect(()=>()=>aiWorkerRef.current?.terminate(),[])
   useEffect(()=>{
     if(appMode!=='battle'||p.winner||players[p.turn]!=='ai'){setThinking(false);return}
     setThinking(true)
-    const worker=new AiWorker(),requestId=Math.random()
-    const timer=window.setTimeout(()=>worker.postMessage({id:requestId,position:p,level}),350)
+    const worker=aiWorkerRef.current??new AiWorker(),requestId=++aiRequestId.current,started=performance.now()
+    aiWorkerRef.current=worker
+    let completed=false
     worker.onmessage=(event:MessageEvent<{id:number;move?:Move;stats:AiSearchStats}>)=>{
       if(event.data.id!==requestId)return
-      setAiDebug({move:event.data.move,stats:event.data.stats})
+      completed=true
+      worker.onmessage=null
+      worker.onerror=null
+      setAiDebug({move:event.data.move,stats:event.data.stats,elapsedMs:performance.now()-started})
       if(event.data.move)commit(event.data.move)
       else setThinking(false)
     }
     worker.onerror=event=>{
+      completed=true
+      worker.terminate()
+      if(aiWorkerRef.current===worker)aiWorkerRef.current=null
       console.error('AI worker failed',event)
       setThinking(false)
     }
-    return()=>{window.clearTimeout(timer);worker.terminate()}
+    worker.postMessage({id:requestId,position:p,level})
+    return()=>{
+      worker.onmessage=null
+      worker.onerror=null
+      if(!completed){
+        worker.terminate()
+        if(aiWorkerRef.current===worker)aiWorkerRef.current=null
+      }
+    }
   },[appMode,commit,level,p,players])
   function tap(i:number){if(thinking||p.winner||players[p.turn]==='ai')return;if(sel){const legalMove=lm.find(m=>m.to===i&&isSelected(m));if(legalMove){commit(legalMove);return}const illegalMove=pm.find(m=>m.to===i&&isSelected(m));if(illegalMove&&ruleMode==='normal'){commit(illegalMove,true);return}}const x=p.board[i];setSel(x?.side===p.turn?{from:i}:null)}
   function reset(){setHist([clone(INITIAL)]);setMoves([]);setCur(0);setSel(null);setAiDebug(null);setReview(null)}
@@ -55,11 +72,18 @@ if(appMode==='menu')return <ModeMenu variant={variant} pieceSet={pieceSet} piece
 if(appMode==='puzzle')return <PuzzleMode variant={variant} names={names} pieceSet={pieceSet} setPieceSet={setPieceSet} pieceRoot={pieceRoot} onExit={()=>setAppMode('menu')}/>
 if(review)return <ReviewScreen moments={review} variant={variant} names={names} pieceSet={pieceSet} pieceRoot={pieceRoot} onClose={()=>setReview(null)} onReset={reset}/>
 return <main className={`app-shell ${isSamurai?'samurai':`sweets-${pieceSet}`}`}><header><div className="brand"><span>{isSamurai?'さ':'お'}</span><div><h1>{isSamurai?'さむらいしょうぎ':'おかししょうぎ'}</h1><p>対局モード</p></div></div><div className="header-actions"><button className="new" onClick={()=>setAppMode('menu')}>モード選択</button><button className="new" onClick={reset}>新しい対局</button></div></header><section className="game-card">
+<TurnBadge side={p.turn} controller={players[p.turn]} thinking={thinking} winner={p.winner}/>
 {(['gote']as Side[]).map(s=><Player key={s} side={s} p={p} thinking={thinking} players={players} setPlayers={setPlayers}/>)}<Hand side="gote" p={p} sel={sel} setSel={setSel} players={players} pieceSet={pieceSet} names={names} pieceRoot={pieceRoot}/><BattleBoard position={p} selection={sel} targets={targets} illegalTargets={illegalTargets} ruleMode={ruleMode} names={names} pieceSet={pieceSet} pieceRoot={pieceRoot} onTap={tap}/><Hand side="sente" p={p} sel={sel} setSel={setSel} players={players} pieceSet={pieceSet} names={names} pieceRoot={pieceRoot}/>{(['sente']as Side[]).map(s=><Player key={s} side={s} p={p} thinking={thinking} players={players} setPlayers={setPlayers}/>)}{p.winner&&<div className="result"><span>{p.reason?.includes('が取られる場所に動いてしまいました')?'❌':'🎉'}</span><div><b>{p.winner==='sente'?'せんて':'ごて'}の勝ち！</b><small>{p.reason}</small></div><div className="result-actions"><button className="review-start" onClick={openReview} disabled={reviewBusy}>{reviewBusy?'考え中…':'いっしょにおさらい'}</button><button onClick={reset}>もう一局</button></div></div>}</section>
 <section className="controls"><BattleTimeline current={cur} moveCount={moves.length} historyLength={hist.length} onSelect={setCur}/><div className="setting"><div><b>対局モード</b><span>{ruleMode==='normal'?`${names.lion}が取られる手を指すと負けです`:`${names.lion}が取られる手を❌で案内します`}</span></div><select value={ruleMode} onChange={e=>{setRuleMode(e.target.value as RuleMode);setSel(null)}}><option value="normal">通常</option><option value="beginner">入門</option></select></div><div className="setting"><div><b>AIのつよさ</b><span>端末の中だけで考えます</span></div><select value={level} onChange={e=>setLevel(+e.target.value)}><option value="1">やさしい</option><option value="2">ふつう</option><option value="3">つよい</option><option value="4">とてもつよい</option></select></div>{import.meta.env.DEV&&<AiDebug result={aiDebug} names={names}/>} {!isSamurai&&<><div className="setting"><div><b>見た目のテーマ</b><span>新しいテーマを追加できます</span></div><select value={visualTheme} onChange={e=>setVisualTheme(e.target.value as VisualTheme)}>{Object.entries(VISUAL_THEMES).map(([id,v])=><option key={id} value={id}>{v.label}</option>)}</select></div><div className="setting"><div><b>おかしの種類</b><span>対局中も変更できます</span></div><select value={pieceSet} onChange={e=>setPieceSet(e.target.value as PieceSet)}><option value="wagashi">和菓子</option><option value="western">洋菓子</option><option value="mix">和洋MIX</option></select></div></>}{isSamurai?<div className="battlefield-setting"><div><b>舞台</b><span>草原と土の戦場</span></div><strong>戦場</strong></div>:<div className="board-setting"><div><b>盤のデザイン</b><span>対局中も変更できます</span></div><BoardStylePicker/></div>}<BattleMoveHistory moves={moves} current={cur} names={names} onSelect={setCur}/></section><footer>対局はこの端末だけで進みます · オフラインでも遊べます</footer></main>}
 
 function BattleBoard({position,selection,targets,illegalTargets,ruleMode,names,pieceSet,pieceRoot,onTap}:{position:Position;selection:{from?:number;hand?:number}|null;targets:Set<number>;illegalTargets:Set<number>;ruleMode:RuleMode;names:Record<Kind,string>;pieceSet:PieceSet;pieceRoot:string;onTap:(index:number)=>void}){
   return <div className="board">{position.board.map((piece,index)=><button key={index} onClick={()=>onTap(index)} className={`square ${(Math.floor(index/3)+index%3)%2?'shade':''} ${selection?.from===index?'chosen':''} ${targets.has(index)?'target':''} ${ruleMode==='beginner'&&illegalTargets.has(index)?'illegal-target':''}`} aria-label={`${F[index%3]}${R[Math.floor(index/3)]}${piece?names[piece.kind]:'空き'}${ruleMode==='beginner'&&illegalTargets.has(index)?`、この手では${names.lion}が取られます`:''}`}>{piece&&<><MovementGuides kind={piece.kind} side={piece.side}/><div className={`piece ${piece.side}`}><PieceIcon kind={piece.kind} pieceSet={pieceSet} pieceRoot={pieceRoot}/></div></>}</button>)}</div>
+}
+
+function TurnBadge({side,controller,thinking,winner}:{side:Side;controller:'human'|'ai';thinking:boolean;winner?:Side}){
+  const sideLabel=side==='sente'?'先手':'後手',mark=side==='sente'?'▲':'△'
+  const detail=winner?'対局終了':controller==='human'?'駒を選んでください':thinking?'AIが考えています…':'AIの手番です'
+  return <div className={`turn-badge ${winner?'finished':side} ${thinking&&!winner?'thinking':''}`} role="status" aria-live="polite" aria-atomic="true"><span className="turn-badge-mark">{winner?'✓':mark}</span><span><small>{winner?'おつかれさまでした':'いまの手番'}</small><b>{winner?'対局終了':`${sideLabel}の番`}</b></span><strong>{detail}</strong>{thinking&&!winner&&<i aria-hidden="true"><em/><em/><em/></i>}</div>
 }
 
 const BattleTimeline=memo(function BattleTimeline({current,moveCount,historyLength,onSelect}:{current:number;moveCount:number;historyLength:number;onSelect:(index:number)=>void}){
@@ -72,8 +96,8 @@ const BattleMoveHistory=memo(function BattleMoveHistory({moves,current,names,onS
 
 function AiDebug({result,names}:{result:AiDebugResult|null;names:Record<Kind,string>}){
   if(!result)return <aside className="ai-debug"><b>AI探索情報（開発用）</b><span>AIが指すと計測結果を表示します</span></aside>
-  const{stats,move}=result,hitRate=stats.nodes?stats.tableHits/stats.nodes*100:0
-  return <aside className="ai-debug"><b>AI探索情報（開発用）</b><span>{move?note(move,names):'指し手なし'}</span><dl><div><dt>局面</dt><dd>{stats.nodes.toLocaleString()}</dd></div><div><dt>置換表</dt><dd>{stats.tableHits.toLocaleString()}回 ({hitRate.toFixed(1)}%)</dd></div><div><dt>枝刈り</dt><dd>{stats.cutoffs.toLocaleString()}回</dd></div><div><dt>深さ</dt><dd>{stats.maxPly} / {stats.depth}</dd></div><div><dt>時間</dt><dd>{stats.durationMs.toFixed(1)} ms</dd></div><div><dt>評価</dt><dd>{stats.value===null?'—':stats.value.toFixed(1)}</dd></div><div><dt>保存局面</dt><dd>{stats.tableSize.toLocaleString()}</dd></div></dl></aside>
+  const{stats,move,elapsedMs}=result,hitRate=stats.nodes?stats.tableHits/stats.nodes*100:0,nodesPerSecond=stats.durationMs?Math.round(stats.nodes/stats.durationMs*1000):0
+  return <aside className="ai-debug"><b>AI探索情報（開発用）</b><span>{move?note(move,names):'指し手なし'}</span><dl><div><dt>局面</dt><dd>{stats.nodes.toLocaleString()}</dd></div><div><dt>生成手</dt><dd>{stats.generatedMoves.toLocaleString()}</dd></div><div><dt>置換表</dt><dd>{stats.tableHits.toLocaleString()}回 ({hitRate.toFixed(1)}%)</dd></div><div><dt>枝刈り</dt><dd>{stats.cutoffs.toLocaleString()}回</dd></div><div><dt>深さ</dt><dd>{stats.maxPly} / {stats.depth}</dd></div><div><dt>探索時間</dt><dd>{stats.durationMs.toFixed(1)} ms</dd></div><div><dt>応答全体</dt><dd>{elapsedMs.toFixed(1)} ms</dd></div><div><dt>探索速度</dt><dd>{nodesPerSecond.toLocaleString()} 局面/秒</dd></div><div><dt>評価</dt><dd>{stats.value===null?'—':stats.value.toFixed(1)}</dd></div><div><dt>保存局面</dt><dd>{stats.tableSize.toLocaleString()}</dd></div></dl></aside>
 }
 function ModeMenu({variant,pieceSet,pieceRoot,onBattle,onPuzzle}:{variant:AppVariant;pieceSet:PieceSet;pieceRoot:string;onBattle:()=>void;onPuzzle:()=>void}){
   const isSamurai=variant==='samurai',title=isSamurai?'さむらいしょうぎ':'おかししょうぎ'
