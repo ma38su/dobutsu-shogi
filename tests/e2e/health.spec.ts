@@ -64,9 +64,11 @@ test('AIが先手の着手に応手する', async ({ page }) => {
   await expect(page.locator('.turn-badge')).toContainText('駒を選んでください')
 
   await page.getByRole('button', { name: '2三こんぺいとう', exact: true }).click()
+  const aiTurnStarted=Date.now()
   await page.getByRole('button', { name: '2二こんぺいとう', exact: true }).click()
 
   await expect(page.locator('.timeline')).toContainText('2 / 2 手', { timeout: 10_000 })
+  expect(Date.now()-aiTurnStarted).toBeGreaterThanOrEqual(300)
   await expect(page.getByText('● 手番です')).toBeVisible()
   expect(errors).toEqual([])
 })

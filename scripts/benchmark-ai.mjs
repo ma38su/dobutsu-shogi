@@ -13,7 +13,8 @@ const INITIAL = {
   turn: 'sente',
 }
 
-const sampleSize = Number.parseInt(process.env.AI_BENCHMARK_SAMPLES ?? '12', 10)
+const sampleSize = Number.parseInt(process.env.AI_BENCHMARK_SAMPLES ?? '100', 10)
+const warmupSize = Math.min(10, sampleSize)
 let randomState = 0x5eed1234
 function random() {
   randomState = (randomState * 1664525 + 1013904223) >>> 0
@@ -40,28 +41,33 @@ function benchmarkPositions() {
 
 function percentile(values, ratio) {
   const sorted = [...values].sort((a, b) => a - b)
-  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * ratio))]
+  return sorted[Math.max(0, Math.ceil(sorted.length * ratio) - 1)]
 }
 
 const positions = benchmarkPositions()
+for (const level of [2, 3, 4]) {
+  for (const position of positions.slice(0, warmupSize)) {
+    chooseAiMove(position, level, { randomizeTies: false })
+  }
+}
+
 const rows = [2, 3, 4].map(level => {
   const times = []
-  let nodes = 0
+  const nodeCounts = []
   for (const position of positions) {
     const started = performance.now()
     const result = chooseAiMove(position, level, { randomizeTies: false })
     times.push(performance.now() - started)
-    nodes += result.stats.nodes
+    nodeCounts.push(result.stats.nodes)
   }
-  const total = times.reduce((sum, value) => sum + value, 0)
   return {
     level,
     samples: positions.length,
-    averageMs: Number((total / times.length).toFixed(2)),
-    medianMs: Number(percentile(times, .5).toFixed(2)),
+    p50Ms: Number(percentile(times, .5).toFixed(2)),
+    p90Ms: Number(percentile(times, .9).toFixed(2)),
     p95Ms: Number(percentile(times, .95).toFixed(2)),
     maxMs: Number(Math.max(...times).toFixed(2)),
-    averageNodes: Math.round(nodes / positions.length),
+    p95Nodes: Math.round(percentile(nodeCounts, .95)),
   }
 })
 
