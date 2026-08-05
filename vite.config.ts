@@ -16,6 +16,8 @@ export default defineConfig({
         index: resolve(__dirname, 'index.html'),
         okashi: resolve(__dirname, 'okashi/index.html'),
         samurai: resolve(__dirname, 'samurai/index.html'),
+        okashiRules: resolve(__dirname, 'okashi/rules/index.html'),
+        samuraiRules: resolve(__dirname, 'samurai/rules/index.html'),
       },
     },
   },

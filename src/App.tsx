@@ -4,7 +4,7 @@ import PuzzleWorker from './puzzle.worker?worker&inline'
 import type {AiSearchStats} from './ai-engine'
 import type {PuzzleWorkerRequest,PuzzleWorkerResponse} from './puzzle-worker-protocol'
 import {apply,clone,legal,other,pseudo,vec,type Kind,type Move,type Position,type Side} from './game'
-import {applyPuzzle} from './puzzle-engine'
+import {applyPuzzle,isPuzzleCheckingMove} from './puzzle-engine'
 import {PUZZLES,PUZZLE_LEVELS,type PuzzleDefinition,type PuzzleDifficulty} from './puzzles'
 import {buildReview,immediateWinningMoves,type ReviewMoment} from './review-engine'
 import './App.css'
@@ -227,6 +227,8 @@ function PuzzlePlay({puzzle,variant,names,pieceSet,pieceRoot,onBack,onNext,onCom
           setCurrent(apply(current,choice,false))
           if(puzzle.plies===1){
             setFeedback('wrong');setWrongPreview({move:choice,done:false});setThinking(true)
+          }else if(remaining===puzzle.plies&&!isPuzzleCheckingMove(current,choice)){
+            setFeedback('wrong');setWrongPreview({move:choice,done:true,message:`その手は${names.lion}への王手になっていません。詰将棋の初手は、王手になる手を選びましょう。`});setThinking(false)
           }else{
             setRemaining(value=>value-1);setFeedback('continuing');setLastAttackMove(choice)
           }

@@ -165,6 +165,40 @@ test('1手詰めの不正解後に相手の応手と理由を表示する', asyn
   expect(errors).toEqual([])
 })
 
+for (const nonCheckingOpening of [
+  {
+    plies: 3,
+    tab: /3手詰め/,
+    puzzle: /ななめの 連続王手/,
+    move: ['3一 だんご', '2一 空き'],
+  },
+  {
+    plies: 5,
+    tab: /5手詰め/,
+    puzzle: /もちごまから 連続王手/,
+    move: ['2三 だんご', '1三 さくらもち'],
+  },
+]) {
+  test(`${nonCheckingOpening.plies}手詰めは初手が王手でなければすぐ不正解を表示する`, async ({ page }) => {
+    const errors = captureRuntimeErrors(page)
+
+    await page.goto('/okashi/')
+    await page.getByRole('button', { name: /詰将棋に挑戦/ }).click()
+    await page.getByRole('button', { name: nonCheckingOpening.tab }).click()
+    await page.getByRole('button', { name: nonCheckingOpening.puzzle }).click()
+
+    await page.getByRole('button', { name: nonCheckingOpening.move[0], exact: true }).click()
+    await page.getByRole('button', { name: nonCheckingOpening.move[1], exact: true }).click()
+
+    await expect(page.getByText('不正解', { exact: true })).toBeVisible()
+    await expect(page.getByText('不正解：王手ではありません')).toBeVisible()
+    await expect(page.getByText('王手になっていません', { exact: true })).toBeVisible()
+    await expect(page.locator('.puzzle-guide')).toContainText('詰将棋の初手は、王手になる手を選びましょう')
+    await expect(page.getByText('相手の応手', { exact: true })).toHaveCount(0)
+    expect(errors).toEqual([])
+  })
+}
+
 for (const wrongLine of [
   {
     plies: 3,
